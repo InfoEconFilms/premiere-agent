@@ -65,6 +65,14 @@ It expects a local bridge URL in:
 export PREMIERE_AGENT_BRIDGE_URL=http://127.0.0.1:48791/jsonrpc
 ```
 
+A runnable mock bridge scaffold now ships in:
+
+```bash
+python mcp/premiere_bridge_server.py
+```
+
+That server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end before a CEP/UXP panel is packaged. A future real panel should preserve the method names and response shapes and replace the mock backend with Adobe API calls.
+
 The bridge should accept JSON-RPC 2.0 POST requests:
 
 ```json

@@ -269,7 +269,7 @@ HELPER_MODULES = (
     "diarize", "parakeet_onnx_lane", "parakeet_lane",
     "audio_lane", "audio_vocab_default", "visual_lane",
     "build_srt", "export_fcpxml", "render_preview", "build_social_package",
-    "premiere_agent_mcp", "premiere_live_bridge",
+    "premiere_agent_mcp", "premiere_live_bridge", "premiere_bridge_server",
 )
 
 
@@ -891,6 +891,26 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("MCP live write dry-run", dry_text)
         else:
             R.ok("MCP live write dry-run")
+
+        import premiere_bridge_server as pbs  # type: ignore[import-not-found]
+        backend = pbs.MockPremiereBackend()
+        status = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 1, "method": "status", "params": {}})
+        if not status or not status.get("result", {}).get("ok"):
+            R.fail("Premiere bridge server status", str(status))
+        else:
+            R.ok("Premiere bridge server status")
+        dup = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 2, "method": "duplicate_sequence", "params": {"sequence_id": "seq_main", "backup_name": "AI_BACKUP"}})
+        backup_id = ((dup or {}).get("result") or {}).get("backup_sequence_id")
+        marker = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 3, "method": "add_marker", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "time_s": 12.5, "label": "EDITOR NOTE"}})
+        if not marker or not marker.get("result", {}).get("marker", {}).get("id"):
+            R.fail("Premiere bridge marker mutation", str(marker))
+        else:
+            R.ok("Premiere bridge marker mutation")
+        denied_bridge = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 4, "method": "queue_export", "params": {"sequence_id": "seq_main", "output_path": str(tmp / "x.mp4")}})
+        if not denied_bridge or "error" not in denied_bridge:
+            R.fail("Premiere bridge backup enforcement", str(denied_bridge))
+        else:
+            R.ok("Premiere bridge backup enforcement")
     except Exception as e:
         traceback.print_exc()
         R.fail("Premiere Agent MCP", f"{type(e).__name__}: {e}")
