@@ -267,7 +267,7 @@ HELPER_MODULES = (
     "pack_timelines", "preprocess", "preprocess_batch",
     "diarize", "parakeet_onnx_lane", "parakeet_lane",
     "audio_lane", "audio_vocab_default", "visual_lane",
-    "build_srt", "export_fcpxml", "render_preview",
+    "build_srt", "export_fcpxml", "render_preview", "build_social_package",
 )
 
 
@@ -717,7 +717,75 @@ def test_render_preview(R: Results, tmp: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 9. Parakeet fallback path — exercises the conversion + blocked-exception
+# 9. Social package — build main/vertical/square derivatives + metadata docs
+# ---------------------------------------------------------------------------
+
+def test_social_package(R: Results, tmp: Path) -> None:
+    _section("Social derivative package")
+    try:
+        from build_social_package import build_social_package
+
+        src = tmp / "social_src.mp4"
+        _make_synthetic_clip(src, seconds=8.0)
+        edl_path = tmp / "social.edl.json"
+        edl_path.write_text(json.dumps({
+            "name": "social_test",
+            "sources": {"C0001": str(src)},
+            "ranges": [
+                {"source": "C0001", "start": 0.0, "end": 2.0, "beat": "HOOK", "quote": "This is the hook."},
+                {"source": "C0001", "start": 2.5, "end": 6.5, "beat": "POINT", "reason": "Main proof beat."},
+            ],
+        }), encoding="utf-8")
+
+        report = build_social_package(edl_path, output_dir=tmp / "social", max_vertical_s=3.0)
+        outdir = Path(report["output_dir"])
+
+        expected_files = [
+            "main_captioned.mp4", "vertical_60s.mp4", "square.mp4",
+            "main_captioned.edl.json", "vertical_60s.edl.json", "square.edl.json",
+            "chapters.md", "titles.md", "description.md", "thumbnail_prompts.md",
+            "package_report.json",
+        ]
+        missing = [name for name in expected_files if not (outdir / name).exists()]
+        if missing:
+            R.fail("social package files", f"missing: {missing}")
+            return
+        R.ok("social package expected files")
+
+        vertical = report["outputs"]["vertical_60s"]
+        square = report["outputs"]["square"]
+        main = report["outputs"]["main_captioned"]
+        if (vertical.get("width"), vertical.get("height")) != (1080, 1920):
+            R.fail("vertical aspect", f"got {vertical.get('width')}x{vertical.get('height')}")
+        else:
+            R.ok("vertical 9:16 output")
+        if (square.get("width"), square.get("height")) != (1080, 1080):
+            R.fail("square aspect", f"got {square.get('width')}x{square.get('height')}")
+        else:
+            R.ok("square 1:1 output")
+        if (main.get("width"), main.get("height")) != (1920, 1080):
+            R.fail("main aspect", f"got {main.get('width')}x{main.get('height')}")
+        else:
+            R.ok("main 16:9 output")
+
+        if float(vertical.get("duration_s") or 0.0) > 3.4:
+            R.fail("vertical duration cap", f"got {vertical.get('duration_s')}s")
+        else:
+            R.ok("vertical derivative duration cap")
+
+        chapters = (outdir / "chapters.md").read_text(encoding="utf-8")
+        desc = (outdir / "description.md").read_text(encoding="utf-8")
+        if "HOOK" not in chapters or "POINT" not in desc:
+            R.fail("social metadata beat references", "beat names missing from docs")
+        else:
+            R.ok("social metadata includes beat references")
+    except Exception as e:
+        traceback.print_exc()
+        R.fail("social package", f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 10. Parakeet fallback path — exercises the conversion + blocked-exception
 #    classifier without requiring NeMo to be installed. Catches structural
 #    bugs in the fallback that would otherwise only surface on a friend's
 #    NVIDIA-blocked machine.
@@ -1029,6 +1097,7 @@ def run_all(heavy: bool = False, keep_tmp: bool = False) -> Results:
         test_pack_timelines(R, tmp)
         test_fcpxml_roundtrip(R, tmp)
         test_render_preview(R, tmp)
+        test_social_package(R, tmp)
         test_parakeet_fallback(R, tmp)
 
         if heavy:
