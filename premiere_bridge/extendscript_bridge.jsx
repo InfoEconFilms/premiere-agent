@@ -246,7 +246,7 @@ function paQueueExport(raw) {
       ok: true,
       queued: false,
       sequence_id: paSequenceId(seq),
-      export: {
+      "export": {
         output_path: outputPath,
         range_start_s: args.range_start_s || null,
         range_end_s: args.range_end_s || null,
