@@ -267,7 +267,7 @@ HELPER_MODULES = (
     "pack_timelines", "preprocess", "preprocess_batch",
     "diarize", "parakeet_onnx_lane", "parakeet_lane",
     "audio_lane", "audio_vocab_default", "visual_lane",
-    "build_srt", "export_fcpxml",
+    "build_srt", "export_fcpxml", "render_preview",
 )
 
 
@@ -654,7 +654,70 @@ def test_fcpxml_roundtrip(R: Results, tmp: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. Parakeet fallback path — exercises the conversion + blocked-exception
+# 8. Render preview — flatten an EDL to MP4 without touching XML handoff
+# ---------------------------------------------------------------------------
+
+def test_render_preview(R: Results, tmp: Path) -> None:
+    _section("Render preview MP4 from EDL")
+    try:
+        from render_preview import render_preview
+
+        src = tmp / "render_src.mp4"
+        _make_synthetic_clip(src, seconds=6.0)
+
+        edl_path = tmp / "render.edl.json"
+        edl_path.write_text(json.dumps({
+            "name": "render_test",
+            "sources": {"C0001": str(src)},
+            "ranges": [
+                {"source": "C0001", "start": 0.0, "end": 1.5, "beat": "A"},
+                {"source": "C0001", "start": 2.0, "end": 5.0, "beat": "B_SPEED", "speed": 3.0},
+            ],
+        }), encoding="utf-8")
+
+        out = tmp / "review" / "main.mp4"
+        report = render_preview(
+            edl_path, out,
+            resolution=(640, 360),
+            fps="30",
+        )
+
+        if not out.exists() or out.stat().st_size < 10_000:
+            R.fail("render preview output", f"missing/tiny file: {out}")
+            return
+        R.ok(f"render preview MP4 written ({out.stat().st_size // 1024} KB)")
+
+        if not Path(report["contact_sheet"]).exists():
+            R.fail("render contact sheet", "contact sheet missing")
+        else:
+            R.ok("render contact sheet written")
+
+        report_file = out.with_suffix(".render_report.json")
+        if not report_file.exists():
+            R.fail("render report", "render_report.json missing")
+        else:
+            R.ok("render report written")
+
+        # Expected duration: 1.5s + (3.0s / 3x) = ~2.5s. Allow encoder
+        # rounding / concat packet slop, but catch a missing speed transform.
+        dur = float(report.get("output_duration_s") or 0.0)
+        if not (2.2 <= dur <= 2.9):
+            R.fail("render preview duration", f"got {dur:.3f}s, expected about 2.5s")
+        else:
+            R.ok("render preview honors speed field")
+
+        video = report.get("video") or {}
+        if video.get("width") != 640 or video.get("height") != 360:
+            R.fail("render preview resolution", f"got {video.get('width')}x{video.get('height')}")
+        else:
+            R.ok("render preview resolution")
+    except Exception as e:
+        traceback.print_exc()
+        R.fail("render preview", f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 9. Parakeet fallback path — exercises the conversion + blocked-exception
 #    classifier without requiring NeMo to be installed. Catches structural
 #    bugs in the fallback that would otherwise only surface on a friend's
 #    NVIDIA-blocked machine.
@@ -965,6 +1028,7 @@ def run_all(heavy: bool = False, keep_tmp: bool = False) -> Results:
         test_progress(R)
         test_pack_timelines(R, tmp)
         test_fcpxml_roundtrip(R, tmp)
+        test_render_preview(R, tmp)
         test_parakeet_fallback(R, tmp)
 
         if heavy:
