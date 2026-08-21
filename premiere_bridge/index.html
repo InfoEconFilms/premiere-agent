@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Premiere Agent Bridge</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; background: #1f1f1f; color: #f2f2f2; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    p { color: #c8c8c8; line-height: 1.4; }
+    button { background: #4f8cff; color: white; border: 0; border-radius: 4px; padding: 8px 10px; margin: 4px 4px 4px 0; cursor: pointer; }
+    code, pre { background: #111; border: 1px solid #333; border-radius: 4px; }
+    code { padding: 2px 4px; }
+    pre { padding: 10px; overflow: auto; max-height: 220px; }
+    .ok { color: #79d279; }
+    .warn { color: #ffd166; }
+  </style>
+</head>
+<body>
+  <h1>Premiere Agent Bridge</h1>
+  <p>This CEP panel loads the Premiere-side ExtendScript adapter. Run the Python bridge separately, then point Hermes at <code>http://127.0.0.1:48791/jsonrpc</code>.</p>
+  <p>Status: <span id="status" class="warn">not checked</span></p>
+  <button id="btnStatus">Check Premiere status</button>
+  <button id="btnSequence">Get active sequence</button>
+  <button id="btnBackup">Dry backup active sequence</button>
+  <pre id="log">Ready.</pre>
+  <script src="./lib/CSInterface.js"></script>
+  <script src="./main.js"></script>
+</body>
+</html>

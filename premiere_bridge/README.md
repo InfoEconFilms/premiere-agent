@@ -1,6 +1,14 @@
 # Premiere-side bridge scaffold
 
-This folder is a scaffold for replacing the mock Python backend in `mcp/premiere_bridge_server.py` with real Adobe Premiere Pro calls from a CEP/UXP panel.
+This folder is the first installable CEP scaffold for replacing the mock Python backend in `mcp/premiere_bridge_server.py` with real Adobe Premiere Pro calls from a panel.
+
+Current state:
+
+- `CSXS/manifest.xml` declares a Premiere Pro CEP panel.
+- `index.html`, `main.js`, and `lib/CSInterface.js` provide a minimal panel UI.
+- `extendscript_bridge.jsx` implements the first real read operations and guarded write attempts using Premiere ExtendScript APIs.
+- `cep_panel_stub.js` remains a contract/test wrapper for JSON-RPC dispatch shape.
+- `extendscript_stub.jsx` remains a deliberately unsupported stub reference.
 
 The Python bridge already implements the local HTTP JSON-RPC endpoint expected by `mcp/premiere_live_bridge.py`:
 
@@ -13,6 +21,22 @@ For now it uses a deterministic mock backend. A real Premiere panel should imple
 
 1. expose its own local HTTP JSON-RPC server, or
 2. connect to the Python bridge and replace/forward `MockPremiereBackend.dispatch()` calls.
+
+## Local install for Premiere testing
+
+On macOS, install the panel symlink and enable unsigned CEP debug mode:
+
+```bash
+python scripts/install_premiere_bridge.py
+```
+
+Then restart Premiere Pro and open:
+
+```text
+Window → Extensions → Premiere Agent Bridge
+```
+
+The panel can call `paStatus`, `paGetActiveSequence`, and guarded backup/marker functions directly inside Premiere. It does **not** yet expose a production HTTP server from CEP; the Python mock server remains the end-to-end JSON-RPC harness until the panel transport is wired.
 
 ## Required JSON-RPC methods
 

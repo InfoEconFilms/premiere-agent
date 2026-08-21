@@ -71,7 +71,21 @@ A runnable mock bridge scaffold now ships in:
 python mcp/premiere_bridge_server.py
 ```
 
-That server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end before a CEP/UXP panel is packaged. A future real panel should preserve the method names and response shapes and replace the mock backend with Adobe API calls.
+An installable CEP panel scaffold lives in:
+
+```text
+premiere_bridge/
+```
+
+Install it for local Premiere testing with:
+
+```bash
+python scripts/install_premiere_bridge.py
+```
+
+That installs a symlink into the Adobe CEP extensions folder and enables unsigned CEP debug mode on macOS. Restart Premiere, then open `Window → Extensions → Premiere Agent Bridge`.
+
+The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end before a CEP/UXP panel is wired to the HTTP transport. The CEP panel already loads `extendscript_bridge.jsx`, which implements real read probes (`status`, active project/sequence, sequence snapshots) and guarded write attempts for backup, markers, media import, and export handoff where Premiere exposes the needed APIs.
 
 The bridge should accept JSON-RPC 2.0 POST requests:
 

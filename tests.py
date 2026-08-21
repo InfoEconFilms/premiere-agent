@@ -911,6 +911,33 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge backup enforcement", str(denied_bridge))
         else:
             R.ok("Premiere bridge backup enforcement")
+
+        bridge_dir = PROJECT_ROOT / "premiere_bridge"
+        required_files = [
+            bridge_dir / "CSXS" / "manifest.xml",
+            bridge_dir / "index.html",
+            bridge_dir / "main.js",
+            bridge_dir / "lib" / "CSInterface.js",
+            bridge_dir / "extendscript_bridge.jsx",
+            PROJECT_ROOT / "scripts" / "install_premiere_bridge.py",
+        ]
+        missing = [str(p) for p in required_files if not p.exists()]
+        if missing:
+            R.fail("Premiere CEP package files", str(missing))
+        else:
+            R.ok("Premiere CEP package files")
+        manifest = (bridge_dir / "CSXS" / "manifest.xml").read_text(encoding="utf-8")
+        jsx = (bridge_dir / "extendscript_bridge.jsx").read_text(encoding="utf-8")
+        if "com.econfilms.premiereagent.bridge" not in manifest or "extendscript_bridge.jsx" not in manifest:
+            R.fail("Premiere CEP manifest contract", manifest[:500])
+        else:
+            R.ok("Premiere CEP manifest contract")
+        for fn in ("paStatus", "paGetActiveSequence", "paSnapshotSequence", "paDuplicateSequence", "paAddMarker", "paImportMedia", "paQueueExport"):
+            if ("function " + fn) not in jsx:
+                R.fail("Premiere ExtendScript function contract", fn)
+                break
+        else:
+            R.ok("Premiere ExtendScript function contract")
     except Exception as e:
         traceback.print_exc()
         R.fail("Premiere Agent MCP", f"{type(e).__name__}: {e}")
