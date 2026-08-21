@@ -269,7 +269,7 @@ HELPER_MODULES = (
     "diarize", "parakeet_onnx_lane", "parakeet_lane",
     "audio_lane", "audio_vocab_default", "visual_lane",
     "build_srt", "export_fcpxml", "render_preview", "build_social_package",
-    "premiere_agent_mcp",
+    "premiere_agent_mcp", "premiere_live_bridge",
 )
 
 
@@ -864,6 +864,33 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("MCP safety checklist", text)
         else:
             R.ok("MCP safety checklist")
+
+        spec = pam.handle("tools/call", {"name": "premiere_agent_live_bridge_protocol_spec", "arguments": {}})
+        spec_text = spec["content"][0]["text"]
+        if "duplicate_sequence" not in spec_text or "JSON-RPC" not in spec_text:
+            R.fail("MCP live bridge protocol spec", spec_text)
+        else:
+            R.ok("MCP live bridge protocol spec")
+
+        plan_call = pam.handle("tools/call", {"name": "premiere_agent_plan_live_job", "arguments": {"job_type": "batch_export", "sequence_id": "seq1"}})
+        plan_text = plan_call["content"][0]["text"]
+        if "must_duplicate_sequence_first" not in plan_text or "queue_export" not in plan_text:
+            R.fail("MCP live job plan", plan_text)
+        else:
+            R.ok("MCP live job plan")
+
+        denied = pam.handle("tools/call", {"name": "premiere_agent_add_marker", "arguments": {"sequence_id": "seq1", "time_s": 1.0, "label": "NOTE"}})
+        if not denied.get("isError") or "confirm=True" not in denied["content"][0]["text"]:
+            R.fail("MCP live write safety gate", str(denied))
+        else:
+            R.ok("MCP live write safety gate")
+
+        dry = pam.handle("tools/call", {"name": "premiere_agent_add_marker", "arguments": {"sequence_id": "seq1", "time_s": 1.0, "label": "NOTE", "backup_sequence_id": "backup1", "confirm": True}})
+        dry_text = dry["content"][0]["text"]
+        if "dry_run" not in dry_text or "add_marker" not in dry_text:
+            R.fail("MCP live write dry-run", dry_text)
+        else:
+            R.ok("MCP live write dry-run")
     except Exception as e:
         traceback.print_exc()
         R.fail("Premiere Agent MCP", f"{type(e).__name__}: {e}")

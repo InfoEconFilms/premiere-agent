@@ -1,0 +1,300 @@
+"""Adapter for a future live Premiere Pro bridge.
+
+The adapter speaks a small JSON-over-HTTP protocol that a CEP/UXP Premiere
+panel, local bridge app, or third-party Premiere MCP wrapper can implement.
+It is safety-first: write operations are blocked unless the caller explicitly
+confirms the side effect and either supplies a backup sequence id or asks the
+adapter to create one first.
+
+No Adobe APIs are imported here, so the module is testable on machines without
+Premiere installed. With no bridge URL it can return dry-run payloads for
+planning and orchestration tests.
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
+
+DEFAULT_TIMEOUT_S = 15.0
+DEFAULT_BRIDGE_ENV = "PREMIERE_AGENT_BRIDGE_URL"
+
+READ_ACTIONS = {
+    "status",
+    "get_active_project",
+    "get_active_sequence",
+    "snapshot_sequence",
+}
+WRITE_ACTIONS = {
+    "duplicate_sequence",
+    "add_marker",
+    "import_media",
+    "queue_export",
+    "apply_basic_lumetri",
+    "set_clip_transform",
+}
+DESTRUCTIVE_ACTIONS = {
+    "delete_clip",
+    "delete_track",
+    "overwrite_sequence",
+}
+
+
+class BridgeError(RuntimeError):
+    """Raised when the live bridge refuses or cannot complete a request."""
+
+
+@dataclass(frozen=True)
+class BridgeRequest:
+    action: str
+    payload: dict[str, Any]
+    dry_run: bool = False
+
+
+@dataclass(frozen=True)
+class BridgeResponse:
+    ok: bool
+    action: str
+    dry_run: bool
+    request: dict[str, Any]
+    response: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "action": self.action,
+            "dry_run": self.dry_run,
+            "request": self.request,
+            "response": self.response,
+        }
+
+
+class PremiereLiveBridge:
+    """Small safety-gated client for a live Premiere bridge endpoint."""
+
+    def __init__(self, url: str | None = None, *, timeout_s: float = DEFAULT_TIMEOUT_S):
+        self.url = (url or os.getenv(DEFAULT_BRIDGE_ENV) or "").rstrip("/")
+        self.timeout_s = float(timeout_s)
+
+    @property
+    def connected(self) -> bool:
+        return bool(self.url)
+
+    def _request(self, req: BridgeRequest) -> BridgeResponse:
+        body = {
+            "jsonrpc": "2.0",
+            "id": f"premiere-agent-{int(time.time() * 1000)}",
+            "method": req.action,
+            "params": req.payload,
+        }
+        if req.dry_run or not self.connected:
+            return BridgeResponse(
+                ok=True,
+                action=req.action,
+                dry_run=True,
+                request=body,
+                response={
+                    "dry_run": True,
+                    "bridge_url": self.url or None,
+                    "message": "No live request sent. Set PREMIERE_AGENT_BRIDGE_URL or pass bridge_url to execute.",
+                },
+            )
+        data = json.dumps(body).encode("utf-8")
+        http_req = urllib.request.Request(
+            self.url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(http_req, timeout=self.timeout_s) as resp:
+                raw = resp.read().decode("utf-8")
+        except urllib.error.URLError as e:
+            raise BridgeError(f"Premiere bridge request failed: {e}") from e
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise BridgeError(f"Premiere bridge returned non-JSON response: {raw[:500]}") from e
+        if parsed.get("error"):
+            raise BridgeError(f"Premiere bridge error: {parsed['error']}")
+        result = parsed.get("result", parsed)
+        return BridgeResponse(ok=True, action=req.action, dry_run=False, request=body, response=result)
+
+    def status(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("status", {}, dry_run=dry_run)).to_dict()
+
+    def get_active_sequence(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_active_sequence", {}, dry_run=dry_run)).to_dict()
+
+    def duplicate_sequence(self, sequence_id: str, backup_name: str | None = None, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        _require_confirm("duplicate_sequence", confirm)
+        payload = {"sequence_id": sequence_id, "backup_name": backup_name or f"{sequence_id}_AI_BACKUP"}
+        return self._request(BridgeRequest("duplicate_sequence", payload, dry_run=dry_run)).to_dict()
+
+    def add_marker(
+        self,
+        sequence_id: str,
+        time_s: float,
+        label: str,
+        *,
+        color: str = "red",
+        comment: str = "",
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        _require_confirm("add_marker", confirm)
+        _require_backup("add_marker", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "time_s": float(time_s),
+            "label": label,
+            "color": color,
+            "comment": comment,
+        }
+        return self._request(BridgeRequest("add_marker", payload, dry_run=dry_run)).to_dict()
+
+    def import_media(
+        self,
+        sequence_id: str,
+        media_path: str,
+        *,
+        time_s: float | None = None,
+        track: str | None = None,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        _require_confirm("import_media", confirm)
+        _require_backup("import_media", backup_sequence_id)
+        media = Path(media_path).expanduser().resolve()
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "media_path": str(media),
+            "time_s": time_s,
+            "track": track,
+        }
+        return self._request(BridgeRequest("import_media", payload, dry_run=dry_run)).to_dict()
+
+    def queue_export(
+        self,
+        sequence_id: str,
+        output_path: str,
+        *,
+        range_start_s: float | None = None,
+        range_end_s: float | None = None,
+        preset: str = "match_source_h264",
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        _require_confirm("queue_export", confirm)
+        # Export is not timeline-destructive, but a backup id proves the caller
+        # has consciously identified a safe sequence state before rendering.
+        _require_backup("queue_export", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "output_path": str(Path(output_path).expanduser().resolve()),
+            "range_start_s": range_start_s,
+            "range_end_s": range_end_s,
+            "preset": preset,
+        }
+        return self._request(BridgeRequest("queue_export", payload, dry_run=dry_run)).to_dict()
+
+
+def _require_confirm(action: str, confirm: bool) -> None:
+    if not confirm:
+        raise BridgeError(f"{action} is a live-Premiere write action; pass confirm=True after explicit user intent.")
+
+
+def _require_backup(action: str, backup_sequence_id: str | None) -> None:
+    if not backup_sequence_id:
+        raise BridgeError(f"{action} requires backup_sequence_id from duplicate_sequence before mutating or exporting a live timeline.")
+
+
+def plan_live_premiere_job(
+    job_type: Literal["talking_head", "batch_export", "motion_graphic", "caption_pass"],
+    sequence_id: str,
+    *,
+    requested_outputs: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return an orchestrator-safe live-Premiere execution plan."""
+    requested_outputs = requested_outputs or []
+    base = [
+        {"step": "inspect", "tool": "get_active_sequence", "side_effect": "read"},
+        {"step": "backup", "tool": "duplicate_sequence", "side_effect": "write", "requires_confirm": True},
+    ]
+    if job_type == "talking_head":
+        base += [
+            {"step": "mark_editor_notes", "tool": "add_marker", "side_effect": "write", "requires_backup": True},
+            {"step": "caption", "tool": "import_media/add_caption_track", "side_effect": "write", "requires_backup": True},
+            {"step": "polish", "tool": "set_clip_transform/apply_basic_lumetri", "side_effect": "write", "requires_backup": True},
+        ]
+    elif job_type == "batch_export":
+        base += [
+            {"step": "build_export_manifest", "tool": "premiere_agent_batch_export_plan", "side_effect": "file-write"},
+            {"step": "queue_each_export", "tool": "queue_export", "side_effect": "render", "requires_backup": True},
+        ]
+    elif job_type == "motion_graphic":
+        base += [
+            {"step": "extract_selected_transcript", "tool": "snapshot_sequence", "side_effect": "read"},
+            {"step": "render_graphic", "tool": "Remotion/Hyperframes/Manim", "side_effect": "file-write"},
+            {"step": "import_graphic", "tool": "import_media", "side_effect": "write", "requires_backup": True},
+        ]
+    elif job_type == "caption_pass":
+        base += [
+            {"step": "import_or_create_captions", "tool": "import_media/add_caption_track", "side_effect": "write", "requires_backup": True},
+            {"step": "verify_captions", "tool": "snapshot_sequence/export_still", "side_effect": "read/render"},
+        ]
+    else:
+        raise BridgeError(f"unsupported live Premiere job_type: {job_type}")
+    return {
+        "job_type": job_type,
+        "sequence_id": sequence_id,
+        "requested_outputs": requested_outputs,
+        "policy": {
+            "must_duplicate_sequence_first": True,
+            "live_writes_require_confirm": True,
+            "destructive_actions_supported": False,
+            "fallback": "Use edl.json -> cut.xml/cut.fcpxml + render_preview.py if the bridge is unavailable.",
+        },
+        "steps": base,
+    }
+
+
+def live_bridge_protocol_spec() -> dict[str, Any]:
+    """Machine-readable protocol contract for a CEP/UXP bridge implementer."""
+    return {
+        "transport": "JSON-RPC 2.0 over local HTTP POST",
+        "env": DEFAULT_BRIDGE_ENV,
+        "required_response_shape": {"jsonrpc": "2.0", "id": "same as request", "result": {"ok": True, "...": "..."}},
+        "read_actions": sorted(READ_ACTIONS),
+        "write_actions": sorted(WRITE_ACTIONS),
+        "unsupported_destructive_actions": sorted(DESTRUCTIVE_ACTIONS),
+        "write_policy": {
+            "confirm_required": True,
+            "backup_sequence_id_required_after_duplicate": True,
+            "verify_after_write": "timeline snapshot, exported still/contact sheet, or rendered file",
+        },
+        "example_request": {
+            "jsonrpc": "2.0",
+            "id": "premiere-agent-1",
+            "method": "add_marker",
+            "params": {
+                "sequence_id": "seq_123",
+                "backup_sequence_id": "seq_123_AI_BACKUP",
+                "time_s": 42.0,
+                "label": "EDITOR NOTE",
+                "color": "red",
+                "comment": "Review this in-clip editor note before cutting.",
+            },
+        },
+    }

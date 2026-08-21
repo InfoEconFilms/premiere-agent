@@ -20,6 +20,12 @@ HELPERS = ROOT / "helpers"
 if str(HELPERS) not in sys.path:
     sys.path.insert(0, str(HELPERS))
 
+from premiere_live_bridge import (  # type: ignore[import-not-found]
+    PremiereLiveBridge,
+    live_bridge_protocol_spec,
+    plan_live_premiere_job,
+)
+
 SERVER_NAME = "premiere-agent"
 SERVER_VERSION = "0.1.0"
 
@@ -199,6 +205,78 @@ def nle_safety_checklist() -> dict[str, Any]:
     }
 
 
+def live_bridge_status(bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).status(dry_run=dry_run)
+
+
+def live_bridge_plan(job_type: str, sequence_id: str, requested_outputs: list[str] | None = None) -> dict[str, Any]:
+    return plan_live_premiere_job(job_type, sequence_id, requested_outputs=requested_outputs)  # type: ignore[arg-type]
+
+
+def live_bridge_duplicate_sequence(
+    sequence_id: str,
+    backup_name: str | None = None,
+    *,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).duplicate_sequence(
+        sequence_id,
+        backup_name,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_add_marker(
+    sequence_id: str,
+    time_s: float,
+    label: str,
+    *,
+    color: str = "red",
+    comment: str = "",
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).add_marker(
+        sequence_id,
+        time_s,
+        label,
+        color=color,
+        comment=comment,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_queue_export(
+    sequence_id: str,
+    output_path: str,
+    *,
+    range_start_s: float | None = None,
+    range_end_s: float | None = None,
+    preset: str = "match_source_h264",
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).queue_export(
+        sequence_id,
+        output_path,
+        range_start_s=range_start_s,
+        range_end_s=range_end_s,
+        preset=preset,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "premiere_agent_validate_edl": {
         "description": "Validate a Premiere Agent edl.json before render/import/export.",
@@ -224,6 +302,36 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Return safety checklist for live Premiere/NLE automation.",
         "inputSchema": {"type": "object", "properties": {}},
         "handler": lambda a: nle_safety_checklist(),
+    },
+    "premiere_agent_live_bridge_protocol_spec": {
+        "description": "Return the JSON-RPC protocol contract expected from a live Premiere CEP/UXP bridge.",
+        "inputSchema": {"type": "object", "properties": {}},
+        "handler": lambda a: live_bridge_protocol_spec(),
+    },
+    "premiere_agent_live_bridge_status": {
+        "description": "Check the configured live Premiere bridge status; dry-run by default if no bridge is running.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_status(a.get("bridge_url"), a.get("dry_run", True)),
+    },
+    "premiere_agent_plan_live_job": {
+        "description": "Plan a safety-gated live Premiere job before mutating a sequence.",
+        "inputSchema": {"type": "object", "properties": {"job_type": {"type": "string", "enum": ["talking_head", "batch_export", "motion_graphic", "caption_pass"]}, "sequence_id": {"type": "string"}, "requested_outputs": {"type": "array", "items": {"type": "string"}}}, "required": ["job_type", "sequence_id"]},
+        "handler": lambda a: live_bridge_plan(a["job_type"], a["sequence_id"], a.get("requested_outputs")),
+    },
+    "premiere_agent_duplicate_sequence": {
+        "description": "Duplicate/backup a live Premiere sequence. Requires confirm=true for any non-dry-run write.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "backup_name": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_duplicate_sequence(a["sequence_id"], a.get("backup_name"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_add_marker": {
+        "description": "Add a marker to a live Premiere sequence. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "time_s": {"type": "number"}, "label": {"type": "string"}, "color": {"type": "string", "default": "red"}, "comment": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "time_s", "label"]},
+        "handler": lambda a: live_bridge_add_marker(a["sequence_id"], a["time_s"], a["label"], color=a.get("color", "red"), comment=a.get("comment", ""), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_queue_export": {
+        "description": "Queue a live Premiere sequence/range export. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "output_path": {"type": "string"}, "range_start_s": {"type": "number"}, "range_end_s": {"type": "number"}, "preset": {"type": "string", "default": "match_source_h264"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "output_path"]},
+        "handler": lambda a: live_bridge_queue_export(a["sequence_id"], a["output_path"], range_start_s=a.get("range_start_s"), range_end_s=a.get("range_end_s"), preset=a.get("preset", "match_source_h264"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
 }
 

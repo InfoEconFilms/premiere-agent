@@ -22,7 +22,7 @@ The first server is local and stdio-based:
 python mcp/premiere_agent_mcp.py
 ```
 
-It exposes safe tools:
+It exposes safe tools plus dry-run live-bridge planning tools:
 
 | Tool | Side effect | Purpose |
 | --- | --- | --- |
@@ -31,6 +31,12 @@ It exposes safe tools:
 | `premiere_agent_build_social_package` | writes social package | Build main/vertical/square derivative outputs. |
 | `premiere_agent_batch_export_plan` | writes JSON plan | Turn ranges/sequences into a naming-safe export manifest. |
 | `premiere_agent_nle_safety_checklist` | read-only | Return the mandatory safety steps before live-NLE mutation. |
+| `premiere_agent_live_bridge_protocol_spec` | read-only | Return the JSON-RPC contract a CEP/UXP bridge must implement. |
+| `premiere_agent_live_bridge_status` | read-only/dry-run | Check bridge connectivity or produce the request shape when no bridge is configured. |
+| `premiere_agent_plan_live_job` | read-only | Build an orchestrator plan for talking-head, batch-export, motion-graphic, or caption jobs. |
+| `premiere_agent_duplicate_sequence` | write, dry-run default | Duplicate/backup a sequence; requires `confirm=true` for live execution. |
+| `premiere_agent_add_marker` | write, dry-run default | Add a sequence marker; requires `confirm=true` and `backup_sequence_id`. |
+| `premiere_agent_queue_export` | render/write, dry-run default | Queue a sequence/range export; requires `confirm=true` and `backup_sequence_id`. |
 
 ## Hermes registration
 
@@ -44,6 +50,67 @@ hermes mcp test premiere-agent
 ```
 
 Then restart the session or run `/reload-mcp` in a Hermes CLI session.
+
+## Live bridge protocol
+
+The tool adapter lives in:
+
+```text
+mcp/premiere_live_bridge.py
+```
+
+It expects a local bridge URL in:
+
+```bash
+export PREMIERE_AGENT_BRIDGE_URL=http://127.0.0.1:48791/jsonrpc
+```
+
+The bridge should accept JSON-RPC 2.0 POST requests:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "premiere-agent-1",
+  "method": "add_marker",
+  "params": {
+    "sequence_id": "seq_123",
+    "backup_sequence_id": "seq_123_AI_BACKUP",
+    "time_s": 42.0,
+    "label": "EDITOR NOTE",
+    "color": "red",
+    "comment": "Review before cutting."
+  }
+}
+```
+
+Required read methods:
+
+- `status`
+- `get_active_project`
+- `get_active_sequence`
+- `snapshot_sequence`
+
+Initial write methods:
+
+- `duplicate_sequence`
+- `add_marker`
+- `import_media`
+- `queue_export`
+- `apply_basic_lumetri`
+- `set_clip_transform`
+
+Unsupported/destructive until later:
+
+- `delete_clip`
+- `delete_track`
+- `overwrite_sequence`
+
+Write policy enforced by the adapter:
+
+1. Write tools require `confirm=true`.
+2. Timeline-affecting writes require `backup_sequence_id` from `duplicate_sequence`.
+3. Tools default to `dry_run=true`, so they return the request payload without touching Premiere.
+4. Every live write must be followed by a verification action: snapshot, exported still/contact sheet, or rendered file.
 
 ## Future live-Premiere bridge
 
