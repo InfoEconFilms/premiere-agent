@@ -940,10 +940,15 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.ok("Premiere ExtendScript function contract")
         js = (bridge_dir / "main.js").read_text(encoding="utf-8")
         transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
+        shim = (bridge_dir / "lib" / "CSInterface.js").read_text(encoding="utf-8")
         if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport:
             R.fail("Premiere CEP HTTP transport contract", "missing transport wiring")
         else:
             R.ok("Premiere CEP HTTP transport contract")
+        if "ensureExtendScriptBridgeLoaded" not in js or "$.evalFile" not in js or "getSystemPath" not in shim:
+            R.fail("Premiere CEP explicit JSX loader", "missing explicit $.evalFile loader")
+        else:
+            R.ok("Premiere CEP explicit JSX loader")
         node_check = """
 const t = require('./premiere_bridge/rpc_transport.js');
 (async () => {

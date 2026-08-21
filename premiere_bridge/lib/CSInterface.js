@@ -4,6 +4,9 @@
  */
 (function (global) {
   'use strict';
+  if (!global.SystemPath) {
+    global.SystemPath = { EXTENSION: 'extension' };
+  }
   if (global.CSInterface) return;
   function CSInterface() {}
   CSInterface.prototype.evalScript = function (script, callback) {
@@ -12,6 +15,12 @@
       return;
     }
     global.__adobe_cep__.evalScript(script, callback || function () {});
+  };
+  CSInterface.prototype.getSystemPath = function (pathType) {
+    if (!global.__adobe_cep__ || typeof global.__adobe_cep__.getSystemPath !== 'function') {
+      return '';
+    }
+    return global.__adobe_cep__.getSystemPath(pathType);
   };
   global.CSInterface = CSInterface;
 }(this));

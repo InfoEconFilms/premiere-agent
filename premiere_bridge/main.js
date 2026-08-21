@@ -7,6 +7,7 @@
   var statusEl = document.getElementById('status');
   var bridgeEl = document.getElementById('bridge');
   var server = null;
+  var jsxLoaded = false;
 
   function log(value) {
     var text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -18,20 +19,60 @@
     bridgeEl.className = ok ? 'ok' : 'warn';
   }
 
+  function evalScriptRaw(script) {
+    return new Promise(function (resolve, reject) {
+      if (!cs) {
+        reject(new Error('CSInterface unavailable. Open this as a Premiere CEP panel.'));
+        return;
+      }
+      cs.evalScript(script, function (raw) {
+        resolve(raw);
+      });
+    });
+  }
+
+  function quoteForExtendScript(value) {
+    return '"' + String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }
+
+  async function ensureExtendScriptBridgeLoaded() {
+    if (jsxLoaded) return;
+    if (!cs || typeof cs.getSystemPath !== 'function' || typeof SystemPath === 'undefined') {
+      // Fall back to the manifest <ScriptPath>. If that failed, the function call
+      // below will return the original EvalScript error for easier diagnosis.
+      jsxLoaded = true;
+      return;
+    }
+    var extensionPath = cs.getSystemPath(SystemPath.EXTENSION);
+    if (!extensionPath) {
+      jsxLoaded = true;
+      return;
+    }
+    var jsxPath = extensionPath.replace(/\\/g, '/') + '/extendscript_bridge.jsx';
+    var script = 'try { $.evalFile(' + quoteForExtendScript(jsxPath) + '); "__PA_BRIDGE_LOADED__"; } catch (e) { "__PA_BRIDGE_LOAD_ERROR__" + e.toString(); }';
+    var raw = await evalScriptRaw(script);
+    if (String(raw).indexOf('__PA_BRIDGE_LOAD_ERROR__') === 0) {
+      throw new Error('Could not load extendscript_bridge.jsx: ' + raw);
+    }
+    jsxLoaded = true;
+  }
+
   function evalScript(functionName, args) {
     return new Promise(function (resolve, reject) {
       if (!cs) {
         reject(new Error('CSInterface unavailable. Open this as a Premiere CEP panel.'));
         return;
       }
-      var script = functionName + '(' + JSON.stringify(JSON.stringify(args || {})) + ')';
-      cs.evalScript(script, function (raw) {
-        try {
-          resolve(JSON.parse(raw));
-        } catch (err) {
-          reject(new Error('ExtendScript returned non-JSON: ' + raw));
-        }
-      });
+      ensureExtendScriptBridgeLoaded().then(function () {
+        var script = functionName + '(' + JSON.stringify(JSON.stringify(args || {})) + ')';
+        cs.evalScript(script, function (raw) {
+          try {
+            resolve(JSON.parse(raw));
+          } catch (err) {
+            reject(new Error('ExtendScript returned non-JSON: ' + raw));
+          }
+        });
+      }).catch(reject);
     });
   }
 

@@ -36,7 +36,7 @@ Then restart Premiere Pro and open:
 Window → Extensions → Premiere Agent Bridge
 ```
 
-The panel starts a localhost JSON-RPC server when it opens:
+The panel starts a localhost JSON-RPC server when it opens. On each request, `main.js` explicitly loads `extendscript_bridge.jsx` with `$.evalFile(...)` before calling a `pa*` function. This avoids CEP host/version cases where the manifest `<ScriptPath>` does not preload the JSX and Premiere returns the opaque `EvalScript error.` string.
 
 ```text
 http://127.0.0.1:48791/jsonrpc
