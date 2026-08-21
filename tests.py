@@ -938,6 +938,24 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
                 break
         else:
             R.ok("Premiere ExtendScript function contract")
+        js = (bridge_dir / "main.js").read_text(encoding="utf-8")
+        transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
+        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport:
+            R.fail("Premiere CEP HTTP transport contract", "missing transport wiring")
+        else:
+            R.ok("Premiere CEP HTTP transport contract")
+        node_check = """
+const t = require('./premiere_bridge/rpc_transport.js');
+(async () => {
+  const h = t.createJsonRpcHandler(async (name, args) => ({ok: true, name, args}));
+  let r = await h({jsonrpc: '2.0', id: 1, method: 'status', params: {probe: true}});
+  if (!r.result || r.result.name !== 'paStatus' || !r.result.args.probe) process.exit(1);
+  r = await h({jsonrpc: '2.0', id: 2, method: 'missing', params: {}});
+  if (!r.error || r.error.code !== -32601) process.exit(2);
+})();
+"""
+        subprocess.run(["node", "-e", node_check], cwd=str(PROJECT_ROOT), check=True, capture_output=True, text=True)
+        R.ok("Premiere CEP transport runtime")
     except Exception as e:
         traceback.print_exc()
         R.fail("Premiere Agent MCP", f"{type(e).__name__}: {e}")

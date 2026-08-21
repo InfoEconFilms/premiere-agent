@@ -5,7 +5,7 @@ This folder is the first installable CEP scaffold for replacing the mock Python 
 Current state:
 
 - `CSXS/manifest.xml` declares a Premiere Pro CEP panel.
-- `index.html`, `main.js`, and `lib/CSInterface.js` provide a minimal panel UI.
+- `index.html`, `main.js`, `rpc_transport.js`, and `lib/CSInterface.js` provide a minimal panel UI plus local HTTP JSON-RPC transport.
 - `extendscript_bridge.jsx` implements the first real read operations and guarded write attempts using Premiere ExtendScript APIs.
 - `cep_panel_stub.js` remains a contract/test wrapper for JSON-RPC dispatch shape.
 - `extendscript_stub.jsx` remains a deliberately unsupported stub reference.
@@ -36,7 +36,19 @@ Then restart Premiere Pro and open:
 Window → Extensions → Premiere Agent Bridge
 ```
 
-The panel can call `paStatus`, `paGetActiveSequence`, and guarded backup/marker functions directly inside Premiere. It does **not** yet expose a production HTTP server from CEP; the Python mock server remains the end-to-end JSON-RPC harness until the panel transport is wired.
+The panel starts a localhost JSON-RPC server when it opens:
+
+```text
+http://127.0.0.1:48791/jsonrpc
+```
+
+Hermes/MCP can call that endpoint by passing `bridge_url` or by exporting:
+
+```bash
+export PREMIERE_AGENT_BRIDGE_URL=http://127.0.0.1:48791/jsonrpc
+```
+
+The Python mock server is now only the fallback harness for testing the same protocol when Premiere is closed.
 
 ## Required JSON-RPC methods
 

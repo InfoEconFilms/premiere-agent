@@ -18,13 +18,15 @@
 </head>
 <body>
   <h1>Premiere Agent Bridge</h1>
-  <p>This CEP panel loads the Premiere-side ExtendScript adapter. Run the Python bridge separately, then point Hermes at <code>http://127.0.0.1:48791/jsonrpc</code>.</p>
+  <p>This CEP panel loads the Premiere-side ExtendScript adapter and exposes a local JSON-RPC endpoint for Hermes at <code>http://127.0.0.1:48791/jsonrpc</code>.</p>
+  <p>Transport: <span id="bridge" class="warn">starting…</span></p>
   <p>Status: <span id="status" class="warn">not checked</span></p>
   <button id="btnStatus">Check Premiere status</button>
   <button id="btnSequence">Get active sequence</button>
   <button id="btnBackup">Dry backup active sequence</button>
   <pre id="log">Ready.</pre>
   <script src="./lib/CSInterface.js"></script>
+  <script src="./rpc_transport.js"></script>
   <script src="./main.js"></script>
 </body>
 </html>

@@ -1,14 +1,21 @@
-/* global CSInterface */
+/* global CSInterface, PremiereAgentRpcTransport */
 (function () {
   'use strict';
 
   var cs = typeof CSInterface !== 'undefined' ? new CSInterface() : null;
   var logEl = document.getElementById('log');
   var statusEl = document.getElementById('status');
+  var bridgeEl = document.getElementById('bridge');
+  var server = null;
 
   function log(value) {
     var text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
     logEl.textContent = text;
+  }
+
+  function setBridgeStatus(message, ok) {
+    bridgeEl.textContent = message;
+    bridgeEl.className = ok ? 'ok' : 'warn';
   }
 
   function evalScript(functionName, args) {
@@ -39,6 +46,28 @@
       statusEl.textContent = 'error';
       statusEl.className = 'warn';
       log(String(err && err.message ? err.message : err));
+      return null;
+    }
+  }
+
+  function startTransport() {
+    if (server) return;
+    if (!PremiereAgentRpcTransport || !PremiereAgentRpcTransport.startBridgeServer) {
+      setBridgeStatus('transport unavailable', false);
+      return;
+    }
+    try {
+      server = PremiereAgentRpcTransport.startBridgeServer(evalScript, {
+        host: '127.0.0.1',
+        port: 48791,
+        log: log,
+        onStatus: function (state) {
+          if (state && state.ok) setBridgeStatus(state.url, true);
+          else setBridgeStatus(state && state.message ? state.message : 'bridge unavailable', false);
+        }
+      });
+    } catch (err) {
+      setBridgeStatus(String(err && err.message ? err.message : err), false);
     }
   }
 
@@ -57,4 +86,6 @@
       call('paDuplicateSequence', { sequence_id: sequenceId, backup_name: seq.sequence.name + '_AI_BACKUP' });
     }
   });
+
+  startTransport();
 }());

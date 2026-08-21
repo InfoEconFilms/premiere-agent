@@ -85,7 +85,7 @@ python scripts/install_premiere_bridge.py
 
 That installs a symlink into the Adobe CEP extensions folder and enables unsigned CEP debug mode on macOS. Restart Premiere, then open `Window → Extensions → Premiere Agent Bridge`.
 
-The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end before a CEP/UXP panel is wired to the HTTP transport. The CEP panel already loads `extendscript_bridge.jsx`, which implements real read probes (`status`, active project/sequence, sequence snapshots) and guarded write attempts for backup, markers, media import, and export handoff where Premiere exposes the needed APIs.
+The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end without Premiere. The CEP panel now exposes the same endpoint from inside Premiere when opened. It loads `extendscript_bridge.jsx`, which implements real read probes (`status`, active project/sequence, sequence snapshots) and guarded write attempts for backup, markers, media import, and export handoff where Premiere exposes the needed APIs.
 
 The bridge should accept JSON-RPC 2.0 POST requests:
 
