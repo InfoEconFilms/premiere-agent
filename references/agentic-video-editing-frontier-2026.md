@@ -18,6 +18,15 @@ Use this reference when upgrading Premiere Agent beyond transcript-led XML rough
     - Motion graphics lane: Manim for math/diagram animations; Remotion + Hyperframes for kinetic/social/product explainers; Blender/TouchDesigner/Comfy/Fal/Replicate/MCPs as optional specialist tools.
     - Prompt quality matters: vague prompts over-produce text or miss motion graphics; enhanced prompts should inject tool-specific best practices, brand assets, colours, fonts, layout constraints, and visual-vs-text balance.
     - Granular control remains the big unsolved UX gap: small position/colour/text/keyframe tweaks are painful via pure reprompting, suggesting editable scene plans/structured overlays rather than opaque renders.
+- Maciej Dziuba, **Premiere Pro MCP / Claude Code orchestrator video** — transcript provided directly by Si. The video shifts from external render pipelines to an agentic Premiere Pro control loop: Claude Code acts as an orchestrator with more tools than worker assistants, delegates to per-sequence assistants, and manipulates real Premiere sequences via a dual CEP+UXP MCP bridge.
+  - Key workflow claims from transcript:
+    - Orchestrator/worker split: one orchestrator receives `/orchestrator talking head`, spawns/reuses worker assistant tabs per sequence, then checks outputs.
+    - Parallel specialization: one worker trims A-roll/longform, another plans shorts, another captions, another creates/imports motion graphics, while orchestrator coordinates and QA-checks.
+    - In-NLE editability solves a major pain: because the agent works inside Premiere, humans can immediately make small manual tweaks instead of accepting opaque external renders.
+    - Practical tools shown: duplicate/backup sequences, trim 26 min to ~8 min, detect and red-marker editor notes rather than cutting them, plan three shorts, resize/scale vertical sequences, add captions, add zoom-ins, apply subtle Lumetri colour, render named exports to a folder, and batch-render many shorts from one timeline.
+    - Motion graphics workflow: select Premiere in/out range, extract transcript, generate motion-graphic concepts/prompts, send to Remotion/Evolute/Hyperframes, render/import at the correct timeline moment, then revise sizing/background/placement.
+    - Setup pattern: install Premiere Pro MCP, Node.js, CEP + UXP components, register MCP to Claude/agent client, enable bridge in Premiere’s MCP Studio panel, sign in via OAuth, check green connection state.
+    - Tooling implication: a production-grade Premiere bridge needs both CEP and UXP coverage; single-side plugins limit tool access and feel less agentic.
 
 ## Current frontier signals
 
@@ -28,6 +37,7 @@ Use this reference when upgrading Premiere Agent beyond transcript-led XML rough
 5. **Video transformation models are now edit tools.** Runway Aleph is positioned as an in-context video model for adding/removing/transforming objects, generating alternate camera angles, and modifying style/lighting on input video. This is visual transformation, not timeline editing, but an agent can route shots to it.
 6. **Creator-editor tools converge on the same basics.** Gling, FireCut, AutoPod, and GitHub/OpenClaw/Hermes skills all center on bad-take removal, filler/silence cutting, captions, auto-reframe/shorts, zooms, overlays, speed changes, and batch exports.
 7. **Editable structure beats opaque renders.** The Hermes transcript repeatedly calls out granular-control pain: generated motion graphics may be close, but moving text, changing colours, deleting objects, or adding keyframes is too cumbersome by reprompt alone. The agent should emit structured scene plans/overlay JSON/Remotion code that can be edited, diffed, regenerated, and inspected frame-by-frame.
+8. **In-NLE orchestration is a separate frontier.** The Premiere MCP transcript shows a different path from file-based XML handoff: an orchestrator controls Premiere directly, delegates sequence-specific work to assistant agents, preserves backup sequences, adds markers/captions/zoom/colour/motion graphics, and renders/export-batches from the actual NLE timeline. This solves handoff/editability, but increases setup, permissions, and safety complexity.
 
 ## Capability gap vs current Premiere Agent
 
@@ -48,6 +58,7 @@ It is still behind or intentionally limited on:
 - **Cloud/Drive/Telegram production loop**: no first-class Google Drive/rclone ingest/upload recipe tied to video jobs, and no polished mobile voice-note revision workflow.
 - **Visual generative repair/enhancement routing**: no hooks to Runway/Aleph/Fal/Replicate/Adobe/Resolve tools for object removal, generative extend, deblur, focus, upscaling, relighting.
 - **NLE driving loop**: XML is handed off; no round-trip import, inspect, render, revise inside Premiere/Resolve.
+- **Agentic orchestration inside Premiere**: no CEP/UXP/MCP control surface, no slash-command workflow, no worker-per-sequence delegation, no backup-sequence mutation policy, no automated batch export from active timelines.
 
 ## Practical upgrade roadmap
 
@@ -77,6 +88,9 @@ It is still behind or intentionally limited on:
 ### Tier 3 — NLE and generative-tool integrations
 
 - Add optional Premiere/Resolve automation hooks for import, render, and screenshot verification.
+- Add a **Premiere MCP/CEP/UXP lane** as a major optional track: connect to the active Premiere project, duplicate sequences before edits, expose safe tools for markers/captions/scale/zoom/Lumetri/import/export, and require explicit confirmation before destructive timeline mutations.
+- Add an **orchestrator + workers workflow** for multi-sequence jobs: orchestrator plans, delegates longform trim / shorts / captions / motion graphics / export to bounded workers, then verifies the active Premiere timelines and renders.
+- Add a **batch export assistant**: render all shorts/marked sequence ranges from one timeline under a naming scheme into a target folder, with ffprobe verification and skipped/failed item report.
 - Add Google Drive/rclone + Telegram job recipes for mobile ingest, background edit, upload, and voice-note revisions.
 - Add MCP/API routing notes: Fal, Replicate, Comfy UI, Blender MCP, Runway/Aleph/Adobe/Resolve. Require explicit user acceptance before using paid/cloud models, uploading source footage, or storing API keys.
 - Add marker/memo export so editors can see AI decisions inside the NLE: retakes dropped, b-roll suggestions, questionable audio, visual repair candidates.
@@ -85,5 +99,6 @@ It is still behind or intentionally limited on:
 
 - Do not replace Premiere Agent's production-safe XML workflow with a toy ffmpeg-only renderer. Rendered MP4 previews are additive; XML remains authoritative for professional post.
 - Ask before using paid/cloud generative video services or uploading source footage.
+- Treat direct NLE control as high-side-effect automation: duplicate/backup sequences before mutation, avoid destructive edits unless explicitly requested, and verify inside the NLE or via exported renders before claiming success.
 - Keep provenance: record which generated assets, model/tool, prompt, source file, and version produced each output.
 - For source-video research, YouTube may block server-side transcript extraction. Use oEmbed for metadata, mirrored transcript services if available, or ask Si for a transcript/cookies/local browser access.
