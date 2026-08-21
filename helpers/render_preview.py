@@ -14,6 +14,10 @@ Supported EDL fields match the core exporter where possible:
       - audio_strategy: "keep" or "drop". Defaults to keep at 1x, drop when
         speed != 1x, matching export_fcpxml.py.
 
+Optional subtitle burn-in uses an existing output-timeline SRT (`master.srt` by
+default). The SRT remains canonical for NLE import; burn-in is only for review
+and social MP4s.
+
 The renderer intentionally starts conservative: hard cuts, normalized H.264/AAC
 segments, concat demuxer, optional contact sheet + ffprobe-backed report.
 """
@@ -24,6 +28,7 @@ import argparse
 import json
 import math
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -33,6 +38,21 @@ from typing import Any
 
 MIN_SPEED = 1.0
 MAX_SPEED = 10.0
+SUBTITLE_PRESETS = {"none", "standard", "minimal", "bold_social", "hormozi"}
+
+SUBTITLE_FORCE_STYLES = {
+    "standard": "FontName=Helvetica,FontSize=28,PrimaryColour=&H00FFFFFF,OutlineColour=&HAA000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=70",
+    "minimal": "FontName=Helvetica,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&HAA000000,BorderStyle=1,Outline=1,Shadow=0,Alignment=2,MarginV=55",
+    "bold_social": "FontName=Arial,FontSize=42,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&HCC000000,BorderStyle=1,Outline=4,Shadow=1,Alignment=2,MarginV=110",
+    "hormozi": "FontName=Arial,FontSize=48,Bold=1,PrimaryColour=&H0000FFFF,OutlineColour=&HCC000000,BorderStyle=1,Outline=5,Shadow=1,Alignment=2,MarginV=120",
+}
+
+DRAW_TEXT_STYLES = {
+    "standard": {"fontsize": 28, "fontcolor": "white", "boxcolor": "black@0.45", "boxborderw": 12, "y": "h-th-70"},
+    "minimal": {"fontsize": 24, "fontcolor": "white", "boxcolor": "black@0.30", "boxborderw": 8, "y": "h-th-55"},
+    "bold_social": {"fontsize": 42, "fontcolor": "white", "boxcolor": "black@0.65", "boxborderw": 18, "y": "h-th-110"},
+    "hormozi": {"fontsize": 48, "fontcolor": "yellow", "boxcolor": "black@0.70", "boxborderw": 20, "y": "h-th-120"},
+}
 
 
 def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -126,6 +146,232 @@ def _parse_resolution(value: str | None) -> tuple[int, int] | None:
         raise argparse.ArgumentTypeError("resolution must look like 1920x1080") from e
 
 
+def _parse_subtitle_preset(value: str) -> str:
+    preset = (value or "none").strip().lower()
+    if preset not in SUBTITLE_PRESETS:
+        raise argparse.ArgumentTypeError(
+            f"subtitle preset must be one of: {', '.join(sorted(SUBTITLE_PRESETS))}"
+        )
+    return preset
+
+
+def _escape_subtitles_path(path: Path) -> str:
+    """Escape a path for ffmpeg's subtitles filter argument.
+
+    The filter parser treats backslash, colon, comma, and apostrophe as special
+    inside option values. Escaping here keeps spaces and macOS `/var/...` paths
+    safe without invoking a shell.
+    """
+    s = str(path)
+    return (
+        s.replace("\\", "\\\\")
+         .replace(":", "\\:")
+         .replace(",", "\\,")
+         .replace("'", "\\'")
+    )
+
+
+def _escape_force_style(style: str) -> str:
+    return style.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _srt_time_to_seconds(value: str) -> float:
+    m = re.match(r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})", value.strip())
+    if not m:
+        raise ValueError(f"bad SRT timestamp: {value!r}")
+    h, mi, s, ms = (int(x) for x in m.groups())
+    return h * 3600 + mi * 60 + s + ms / 1000.0
+
+
+def _parse_srt(path: Path) -> list[tuple[float, float, str]]:
+    text = path.read_text(encoding="utf-8-sig", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    entries: list[tuple[float, float, str]] = []
+    for block in re.split(r"\n\s*\n", text.strip()):
+        lines = [ln.strip() for ln in block.split("\n") if ln.strip()]
+        if not lines:
+            continue
+        if lines[0].isdigit():
+            lines = lines[1:]
+        if not lines or "-->" not in lines[0]:
+            continue
+        start_raw, end_raw = [part.strip().split()[0] for part in lines[0].split("-->", 1)]
+        cue_text = " ".join(lines[1:]).strip()
+        if not cue_text:
+            continue
+        entries.append((_srt_time_to_seconds(start_raw), _srt_time_to_seconds(end_raw), cue_text))
+    return entries
+
+
+def _escape_drawtext(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+             .replace(":", "\\:")
+             .replace("'", "\\'")
+             .replace("%", "\\%")
+             .replace("\n", " ")
+    )
+
+
+def _burn_subtitles_with_drawtext(src: Path, out: Path, srt: Path, preset: str) -> None:
+    cues = _parse_srt(srt)
+    if not cues:
+        raise ValueError(f"no subtitle cues found in {srt}")
+    style = DRAW_TEXT_STYLES[preset]
+    filters: list[str] = []
+    for start, end, text in cues:
+        filters.append(
+            "drawtext="
+            f"text='{_escape_drawtext(text)}':"
+            f"fontsize={style['fontsize']}:"
+            f"fontcolor={style['fontcolor']}:"
+            "box=1:"
+            f"boxcolor={style['boxcolor']}:"
+            f"boxborderw={style['boxborderw']}:"
+            "x=(w-text_w)/2:"
+            f"y={style['y']}:"
+            f"enable='between(t,{start:.3f},{end:.3f})'"
+        )
+    _run([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(src),
+        "-vf", ",".join(filters),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-c:a", "copy", "-movflags", "+faststart", str(out),
+    ])
+
+
+def _load_caption_font(size: int):
+    from PIL import ImageFont
+
+    candidates = [
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for c in candidates:
+        p = Path(c)
+        if p.exists():
+            try:
+                return ImageFont.truetype(str(p), size=size)
+            except Exception:
+                pass
+    return ImageFont.load_default()
+
+
+def _wrap_caption(text: str, draw, font, max_width: int) -> list[str]:
+    words = text.split()
+    if not words:
+        return []
+    lines: list[str] = []
+    cur: list[str] = []
+    for word in words:
+        trial = " ".join([*cur, word])
+        box = draw.textbbox((0, 0), trial, font=font, stroke_width=2)
+        if cur and (box[2] - box[0]) > max_width:
+            lines.append(" ".join(cur))
+            cur = [word]
+        else:
+            cur.append(word)
+    if cur:
+        lines.append(" ".join(cur))
+    return lines[:3]
+
+
+def _burn_subtitles_with_image_overlay(src: Path, out: Path, srt: Path, preset: str) -> None:
+    """Portable burn-in fallback for ffmpeg builds without text filters.
+
+    Generates a transparent PNG overlay stream with PIL, then uses ffmpeg's
+    widely available `overlay` filter to composite it over the preview.
+    """
+    from PIL import Image, ImageDraw
+
+    cues = _parse_srt(srt)
+    if not cues:
+        raise ValueError(f"no subtitle cues found in {srt}")
+    meta = _ffprobe_json(src)
+    video = next((s for s in meta.get("streams", []) if s.get("codec_type") == "video"), {})
+    width = int(video.get("width") or 1920)
+    height = int(video.get("height") or 1080)
+    duration = _duration(src)
+    fps = 10.0  # enough for caption timing, much cheaper than full-rate PNGs
+    frame_count = max(1, int(math.ceil(duration * fps)))
+    style = DRAW_TEXT_STYLES[preset]
+    font = _load_caption_font(int(style["fontsize"]))
+    tmp_frames = Path(tempfile.mkdtemp(prefix="premiere-agent-captions-"))
+    try:
+        for i in range(frame_count):
+            t = i / fps
+            active = [text for start, end, text in cues if start <= t <= end]
+            img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            if active:
+                draw = ImageDraw.Draw(img)
+                text = active[-1]
+                lines = _wrap_caption(text, draw, font, int(width * 0.86))
+                line_boxes = [draw.textbbox((0, 0), ln, font=font, stroke_width=2) for ln in lines]
+                line_h = max((b[3] - b[1] for b in line_boxes), default=int(style["fontsize"]))
+                gap = max(6, int(line_h * 0.18))
+                block_h = len(lines) * line_h + max(0, len(lines) - 1) * gap
+                margin_v = int(str(style["y"]).split("-")[-1]) if "-" in str(style["y"]) else 80
+                y = max(0, height - block_h - margin_v)
+                for ln, box in zip(lines, line_boxes):
+                    tw = box[2] - box[0]
+                    th = box[3] - box[1]
+                    x = (width - tw) // 2
+                    pad_x = int(style["boxborderw"])
+                    pad_y = max(6, pad_x // 2)
+                    draw.rounded_rectangle(
+                        [x - pad_x, y - pad_y, x + tw + pad_x, y + th + pad_y],
+                        radius=10,
+                        fill=(0, 0, 0, 170),
+                    )
+                    fill = (255, 255, 0, 255) if style["fontcolor"] == "yellow" else (255, 255, 255, 255)
+                    draw.text((x, y), ln, font=font, fill=fill, stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                    y += line_h + gap
+            img.save(tmp_frames / f"frame_{i:06d}.png")
+
+        _run([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(src),
+            "-framerate", str(fps), "-i", str(tmp_frames / "frame_%06d.png"),
+            "-filter_complex", "[0:v][1:v]overlay=0:0:format=auto[v]",
+            "-map", "[v]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "copy", "-movflags", "+faststart", "-shortest", str(out),
+        ])
+    finally:
+        import shutil
+        shutil.rmtree(tmp_frames, ignore_errors=True)
+
+
+def _burn_subtitles(src: Path, out: Path, srt: Path, preset: str) -> None:
+    # Prefer libass/subtitles when ffmpeg was built with it; fall back to a
+    # portable drawtext renderer for Homebrew/static builds without libass.
+    style = SUBTITLE_FORCE_STYLES[preset]
+    vf = (
+        f"subtitles=filename='{_escape_subtitles_path(srt)}'"
+        f":force_style='{_escape_force_style(style)}'"
+    )
+    try:
+        _run([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(src),
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "copy", "-movflags", "+faststart", str(out),
+        ])
+    except subprocess.CalledProcessError as e:
+        if "No such filter" not in (e.stderr or "") and "Filter not found" not in (e.stderr or ""):
+            raise
+        try:
+            _burn_subtitles_with_drawtext(src, out, srt, preset)
+        except subprocess.CalledProcessError as e2:
+            if "No such filter" not in (e2.stderr or "") and "Filter not found" not in (e2.stderr or ""):
+                raise
+            _burn_subtitles_with_image_overlay(src, out, srt, preset)
+
+
 def _segment_filter(
     *,
     src: Path,
@@ -202,6 +448,8 @@ def render_preview(
     *,
     resolution: tuple[int, int] | None = None,
     fps: str | None = None,
+    burn_subtitles: str = "none",
+    subtitles: Path | None = None,
     keep_segments: bool = False,
     contact_sheet: Path | None = None,
     report_path: Path | None = None,
@@ -212,11 +460,13 @@ def render_preview(
     ranges = edl.get("ranges") or edl.get("edl") or []
     if not ranges:
         raise ValueError("EDL has no ranges")
+    burn_subtitles = _parse_subtitle_preset(burn_subtitles)
 
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     report_path = report_path or output.with_suffix(".render_report.json")
     contact_sheet = contact_sheet or output.with_name(output.stem + "_contact_sheet.jpg")
+    subtitles = (subtitles.resolve() if subtitles is not None else edl_path.parent / "master.srt")
 
     tmp_owner = tempfile.TemporaryDirectory(prefix="premiere-agent-render-")
     tmp = Path(tmp_owner.name)
@@ -259,13 +509,25 @@ def render_preview(
             "-c", "copy", "-movflags", "+faststart", str(output),
         ])
 
+        subtitle_report: dict[str, Any] = {"preset": burn_subtitles, "path": None, "burned": False}
+        if burn_subtitles != "none":
+            subtitle_report["path"] = str(subtitles)
+            if not subtitles.exists():
+                raise FileNotFoundError(
+                    f"subtitle burn requested ({burn_subtitles}) but SRT not found: {subtitles}"
+                )
+            burned = tmp / "burned_subtitles.mp4"
+            _burn_subtitles(output, burned, subtitles, burn_subtitles)
+            burned.replace(output)
+            subtitle_report["burned"] = True
+
         if contact_sheet:
             try:
                 _run([
                     "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                     "-i", str(output),
-                    "-vf", "fps=1/5,scale=320:-1,tile=5x3",
-                    "-frames:v", "1", str(contact_sheet),
+                    "-vf", "fps=1/5,scale=320:-1,tile=5x3,format=yuvj420p",
+                    "-frames:v", "1", "-q:v", "3", str(contact_sheet),
                 ])
             except subprocess.CalledProcessError as e:
                 print(f"warn: contact sheet failed: {e.stderr.strip()}", file=sys.stderr)
@@ -291,6 +553,7 @@ def render_preview(
                 "channels": audio.get("channels"),
                 "sample_rate": audio.get("sample_rate"),
             },
+            "subtitles": subtitle_report,
             "contact_sheet": str(contact_sheet) if contact_sheet and contact_sheet.exists() else None,
         }
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -309,6 +572,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output review MP4")
     ap.add_argument("--resolution", type=_parse_resolution, default=None, help="Target resolution, e.g. 1920x1080")
     ap.add_argument("--fps", default="auto", help="Output fps: auto, 24, 25, 29.97, 30, etc.")
+    ap.add_argument(
+        "--burn-subtitles", type=_parse_subtitle_preset, default="none",
+        help="Burn an SRT into the review MP4 with a preset: none, standard, minimal, bold_social, hormozi",
+    )
+    ap.add_argument("--subtitles", type=Path, default=None, help="SRT path for burn-in (default: <edl_dir>/master.srt)")
     ap.add_argument("--keep-segments", action="store_true", help="Keep normalized segment MP4s next to output")
     ap.add_argument("--contact-sheet", type=Path, default=None, help="Override contact sheet path")
     ap.add_argument("--report", type=Path, default=None, help="Override JSON report path")
@@ -319,6 +587,8 @@ def main(argv: list[str] | None = None) -> int:
             args.edl, args.output,
             resolution=args.resolution,
             fps=args.fps,
+            burn_subtitles=args.burn_subtitles,
+            subtitles=args.subtitles,
             keep_segments=args.keep_segments,
             contact_sheet=args.contact_sheet,
             report_path=args.report,

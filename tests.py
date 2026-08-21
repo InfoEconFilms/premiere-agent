@@ -711,6 +711,26 @@ def test_render_preview(R: Results, tmp: Path) -> None:
             R.fail("render preview resolution", f"got {video.get('width')}x{video.get('height')}")
         else:
             R.ok("render preview resolution")
+
+        srt = tmp / "master.srt"
+        srt.write_text(
+            "1\r\n00:00:00,100 --> 00:00:01,200\r\nHELLO WORLD\r\n\r\n",
+            encoding="utf-8",
+        )
+        burned = tmp / "review" / "captioned.mp4"
+        burned_report = render_preview(
+            edl_path, burned,
+            resolution=(640, 360),
+            fps="30",
+            burn_subtitles="bold_social",
+            subtitles=srt,
+            contact_sheet=tmp / "review" / "captioned_contact.jpg",
+        )
+        subtitles = burned_report.get("subtitles") or {}
+        if not burned.exists() or not subtitles.get("burned"):
+            R.fail("render subtitle burn", f"burned={subtitles!r} exists={burned.exists()}")
+        else:
+            R.ok("render preview burns styled subtitles")
     except Exception as e:
         traceback.print_exc()
         R.fail("render preview", f"{type(e).__name__}: {e}")
@@ -736,6 +756,10 @@ def test_social_package(R: Results, tmp: Path) -> None:
                 {"source": "C0001", "start": 2.5, "end": 6.5, "beat": "POINT", "reason": "Main proof beat."},
             ],
         }), encoding="utf-8")
+        (tmp / "master.srt").write_text(
+            "1\r\n00:00:00,100 --> 00:00:01,500\r\nSOCIAL CAPTION\r\n\r\n",
+            encoding="utf-8",
+        )
 
         report = build_social_package(edl_path, output_dir=tmp / "social", max_vertical_s=3.0)
         outdir = Path(report["output_dir"])
@@ -779,6 +803,11 @@ def test_social_package(R: Results, tmp: Path) -> None:
             R.fail("social metadata beat references", "beat names missing from docs")
         else:
             R.ok("social metadata includes beat references")
+
+        if (report.get("subtitles") or {}).get("burn_preset") != "standard":
+            R.fail("social subtitle burn preset", f"got {report.get('subtitles')}")
+        else:
+            R.ok("social package burns captions when master.srt exists")
     except Exception as e:
         traceback.print_exc()
         R.fail("social package", f"{type(e).__name__}: {e}")

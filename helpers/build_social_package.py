@@ -240,12 +240,17 @@ def build_social_package(
     _write_json(vertical_edl_path, vertical_edl)
     _write_json(square_edl_path, square_edl)
 
+    srt = edl_path.parent / "master.srt"
+    burn_preset = "standard" if srt.exists() else "none"
+
     main_mp4 = social_dir / "main_captioned.mp4"
     main_report = render_preview(
         main_edl_path,
         main_mp4,
         resolution=(1920, 1080),
         fps="30",
+        burn_subtitles=burn_preset,
+        subtitles=srt if srt.exists() else None,
         contact_sheet=social_dir / "main_contact_sheet.jpg",
         report_path=social_dir / "main_captioned.render_report.json",
     )
@@ -258,6 +263,8 @@ def build_social_package(
         vertical_base,
         resolution=(1920, 1080),
         fps="30",
+        burn_subtitles=burn_preset,
+        subtitles=srt if srt.exists() else None,
         contact_sheet=social_dir / "vertical_60s_contact_sheet.jpg",
         report_path=social_dir / "vertical_60s_base.render_report.json",
     )
@@ -289,6 +296,11 @@ def build_social_package(
             },
             "vertical_60s": vertical,
             "square": square,
+        },
+        "subtitles": {
+            "burn_preset": burn_preset,
+            "srt": str(srt) if srt.exists() else None,
+            "note": "Burned into social MP4s when master.srt exists; SRT remains canonical for NLE import.",
         },
         "intermediate_reports": {
             "main_captioned": str(social_dir / "main_captioned.render_report.json"),
