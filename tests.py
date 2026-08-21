@@ -942,6 +942,10 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere ExtendScript ES3 JSON contract", "must not depend on native JSON.stringify")
         else:
             R.ok("Premiere ExtendScript ES3 JSON contract")
+        if "paMaxClipEndSeconds" not in jsx or "duration >= 0" not in jsx:
+            R.fail("Premiere ExtendScript duration fallback", "negative sequence duration must fall back to max clip end")
+        else:
+            R.ok("Premiere ExtendScript duration fallback")
         js = (bridge_dir / "main.js").read_text(encoding="utf-8")
         transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
         shim = (bridge_dir / "lib" / "CSInterface.js").read_text(encoding="utf-8")

@@ -63,15 +63,59 @@ function paSequenceId(seq) {
   return String(seq.sequenceID || seq.id || seq.name || 'active_sequence');
 }
 
-function paSequenceDurationSeconds(seq) {
+function paClipEndSeconds(clip) {
   try {
-    if (seq && seq.end && seq.end.seconds !== undefined) return Number(seq.end.seconds);
-    if (seq && seq.getInPointAsTime && seq.getOutPointAsTime) {
-      var outT = seq.getOutPointAsTime();
-      if (outT && outT.seconds !== undefined) return Number(outT.seconds);
+    if (clip && clip.end && clip.end.seconds !== undefined) {
+      var endS = Number(clip.end.seconds);
+      if (isFinite(endS) && endS >= 0) return endS;
     }
   } catch (err) {}
   return null;
+}
+
+function paMaxClipEndSeconds(seq) {
+  var maxEnd = null;
+  try {
+    if (seq && seq.videoTracks) {
+      for (var vt = 0; vt < seq.videoTracks.numTracks; vt += 1) {
+        var vTrack = seq.videoTracks[vt];
+        for (var vc = 0; vc < vTrack.clips.numItems; vc += 1) {
+          var vEnd = paClipEndSeconds(vTrack.clips[vc]);
+          if (vEnd !== null && (maxEnd === null || vEnd > maxEnd)) maxEnd = vEnd;
+        }
+      }
+    }
+  } catch (vErr) {}
+  try {
+    if (seq && seq.audioTracks) {
+      for (var at = 0; at < seq.audioTracks.numTracks; at += 1) {
+        var aTrack = seq.audioTracks[at];
+        for (var ac = 0; ac < aTrack.clips.numItems; ac += 1) {
+          var aEnd = paClipEndSeconds(aTrack.clips[ac]);
+          if (aEnd !== null && (maxEnd === null || aEnd > maxEnd)) maxEnd = aEnd;
+        }
+      }
+    }
+  } catch (aErr) {}
+  return maxEnd;
+}
+
+function paSequenceDurationSeconds(seq) {
+  var duration = null;
+  try {
+    if (seq && seq.end && seq.end.seconds !== undefined) {
+      duration = Number(seq.end.seconds);
+      if (isFinite(duration) && duration >= 0) return duration;
+    }
+    if (seq && seq.getOutPointAsTime) {
+      var outT = seq.getOutPointAsTime();
+      if (outT && outT.seconds !== undefined) {
+        duration = Number(outT.seconds);
+        if (isFinite(duration) && duration >= 0) return duration;
+      }
+    }
+  } catch (err) {}
+  return paMaxClipEndSeconds(seq);
 }
 
 function paMarkerCount(markers) {
