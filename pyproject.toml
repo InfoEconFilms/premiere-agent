@@ -51,7 +51,8 @@ dependencies = [
     #   - the TDT decoder (token + duration)
     #   - the silero VAD chunker (optional, used for very long audio)
     #   - HuggingFace Hub model fetch (the [hub] extra)
-    "onnx-asr[gpu,hub]>=0.11.0",
+    "onnx-asr[hub]>=0.11.0;platform_system=='Darwin'",       # macOS: no GPU extra (no onnxruntime-gpu on Mac)
+    "onnx-asr[gpu,hub]>=0.11.0;platform_system!='Darwin'",  # Win + Linux: GPU extra
     # ── ONNX Runtime, split by OS ──
     # `onnxruntime-gpu` ships CUDA + TensorRT + DirectML + CPU EPs but
     # has NO macOS wheels on PyPI (and never will — Apple killed CUDA

@@ -1,4 +1,22 @@
-/helpers/__pycache__
-/__pycache__
-/video_use_premiere.egg-info
+# Python caches / build outputs
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Local environment / secrets
+.env
+.venv/
+venv/
+
+# Hermes/session-local artifacts and attached media
+.hermes/
+
+# OS/editor noise
+.DS_Store
+*.swp
+
+# Runtime logs
+*.log
 heavy_run.log
