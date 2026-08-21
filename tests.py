@@ -938,6 +938,10 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
                 break
         else:
             R.ok("Premiere ExtendScript function contract")
+        if "function paJsonValue" not in jsx or "JSON.stringify" in jsx:
+            R.fail("Premiere ExtendScript ES3 JSON contract", "must not depend on native JSON.stringify")
+        else:
+            R.ok("Premiere ExtendScript ES3 JSON contract")
         js = (bridge_dir / "main.js").read_text(encoding="utf-8")
         transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
         shim = (bridge_dir / "lib" / "CSInterface.js").read_text(encoding="utf-8")

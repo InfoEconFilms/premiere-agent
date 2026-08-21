@@ -9,13 +9,43 @@
  * orchestrator is responsible for calling duplicate_sequence first.
  */
 
+function paEscapeJsonString(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+}
+
+function paJsonValue(value) {
+  var t = typeof value;
+  if (value === null || value === undefined) return 'null';
+  if (t === 'string') return '"' + paEscapeJsonString(value) + '"';
+  if (t === 'number') return isFinite(value) ? String(value) : 'null';
+  if (t === 'boolean') return value ? 'true' : 'false';
+  if (value instanceof Array) {
+    var arr = [];
+    for (var i = 0; i < value.length; i += 1) arr.push(paJsonValue(value[i]));
+    return '[' + arr.join(',') + ']';
+  }
+  if (t === 'object') {
+    var parts = [];
+    for (var key in value) {
+      if (value.hasOwnProperty(key) && typeof value[key] !== 'function') {
+        parts.push('"' + paEscapeJsonString(key) + '":' + paJsonValue(value[key]));
+      }
+    }
+    return '{' + parts.join(',') + '}';
+  }
+  return 'null';
+}
+
 function paJson(result) {
-  try { return JSON.stringify(result); }
-  catch (err) { return '{"ok":false,"error":"JSON stringify failed"}'; }
+  try { return paJsonValue(result); }
+  catch (err) { return '{"ok":false,"error":"paJson failed: ' + paEscapeJsonString(String(err)) + '"}'; }
 }
 
 function paParse(raw) {
-  try { return JSON.parse(raw || '{}'); }
+  try {
+    if (typeof JSON !== 'undefined' && JSON.parse) return JSON.parse(raw || '{}');
+  } catch (jsonErr) {}
+  try { return eval('(' + (raw || '{}') + ')'); }
   catch (err) { return {}; }
 }
 
