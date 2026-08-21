@@ -35,6 +35,7 @@ from pathlib import Path
 # fast tier.
 PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT / "helpers"))
+sys.path.insert(0, str(PROJECT_ROOT / "mcp"))
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +269,7 @@ HELPER_MODULES = (
     "diarize", "parakeet_onnx_lane", "parakeet_lane",
     "audio_lane", "audio_vocab_default", "visual_lane",
     "build_srt", "export_fcpxml", "render_preview", "build_social_package",
+    "premiere_agent_mcp",
 )
 
 
@@ -814,7 +816,61 @@ def test_social_package(R: Results, tmp: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 10. Parakeet fallback path — exercises the conversion + blocked-exception
+# 10. MCP starter server — safe file-based tools before live Premiere control
+# ---------------------------------------------------------------------------
+
+def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
+    _section("Premiere Agent MCP starter tools")
+    try:
+        import premiere_agent_mcp as pam  # type: ignore[import-not-found]
+
+        src = tmp / "mcp_src.mp4"
+        src.write_bytes(b"placeholder")
+        edl_path = tmp / "mcp.edl.json"
+        edl_path.write_text(json.dumps({
+            "sources": {"C0001": str(src)},
+            "ranges": [
+                {"source": "C0001", "start": 1.0, "end": 4.0, "beat": "HOOK"},
+                {"source": "C0001", "start": 10.0, "end": 20.0, "beat": "BODY", "speed": 2.0},
+            ],
+        }), encoding="utf-8")
+
+        result = pam.validate_edl(str(edl_path))
+        if not result.get("ok") or result.get("range_count") != 2:
+            R.fail("MCP validate_edl", str(result))
+        else:
+            R.ok("MCP validate_edl")
+
+        plan = pam.batch_export_plan([
+            {"title": "Hook / Short 1", "sequence": "Shorts", "range": "0:00-0:30"},
+            {"title": "Hook / Short 1", "sequence": "Shorts", "range": "0:31-1:00"},
+        ], str(tmp / "exports"))
+        outputs = [Path(item["output"]).name for item in plan["items"]]
+        if len(outputs) != len(set(outputs)) or not (tmp / "exports" / "batch_export_plan.json").exists():
+            R.fail("MCP batch export plan", str(plan))
+        else:
+            R.ok("MCP batch export plan")
+
+        tools = pam.handle("tools/list", {})["tools"]
+        names = {t["name"] for t in tools}
+        if "premiere_agent_validate_edl" not in names or "premiere_agent_nle_safety_checklist" not in names:
+            R.fail("MCP tools/list", str(names))
+        else:
+            R.ok("MCP tools/list")
+
+        called = pam.handle("tools/call", {"name": "premiere_agent_nle_safety_checklist", "arguments": {}})
+        text = called["content"][0]["text"]
+        if "backup" not in text.lower() or "consent" not in text.lower():
+            R.fail("MCP safety checklist", text)
+        else:
+            R.ok("MCP safety checklist")
+    except Exception as e:
+        traceback.print_exc()
+        R.fail("Premiere Agent MCP", f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 11. Parakeet fallback path — exercises the conversion + blocked-exception
 #    classifier without requiring NeMo to be installed. Catches structural
 #    bugs in the fallback that would otherwise only surface on a friend's
 #    NVIDIA-blocked machine.
@@ -1127,6 +1183,7 @@ def run_all(heavy: bool = False, keep_tmp: bool = False) -> Results:
         test_fcpxml_roundtrip(R, tmp)
         test_render_preview(R, tmp)
         test_social_package(R, tmp)
+        test_mcp_starter_tools(R, tmp)
         test_parakeet_fallback(R, tmp)
 
         if heavy:
