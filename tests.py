@@ -993,6 +993,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             PROJECT_ROOT / "premiere_uxp" / "index.cjs",
             PROJECT_ROOT / "premiere_uxp" / "styles.css",
             PROJECT_ROOT / "premiere_uxp" / "THIRD_PARTY_NOTICES.md",
+            PROJECT_ROOT / "scripts" / "install_premiere_uxp.py",
             PROJECT_ROOT / "scripts" / "install_premiere_bridge.py",
         ]
         missing = [str(p) for p in required_files if not p.exists()]
@@ -1054,6 +1055,8 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         uxp_notice = (uxp_dir / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
         if uxp_manifest.get("id") != "com.econfilms.premiereagent.uxp" or uxp_manifest.get("host", {}).get("app") != "premierepro":
             R.fail("Premiere UXP manifest contract", str(uxp_manifest)[:500])
+        elif str(uxp_manifest.get("host", {}).get("minVersion")) != "25.6":
+            R.fail("Premiere UXP manifest contract", "minVersion should match local Premiere UXP registration convention: 25.6")
         else:
             R.ok("Premiere UXP manifest contract")
         if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "review-frames" not in uxp_html:
