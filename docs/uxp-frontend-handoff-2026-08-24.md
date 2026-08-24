@@ -52,7 +52,7 @@ AME proof clip duration_s: 0.25
 Local contact sheet path used in testing:
 
 ```text
-/tmp/premiere-agent-review-frames/contact_sheet.jpg
+/private/tmp/premiere-agent-review-frames/contact_sheet.jpg
 ```
 
 ## UXP frontend scaffold
@@ -194,7 +194,13 @@ The manifest was adjusted to match the working local Premiere registration conve
 Next manual verification step:
 
 ```text
-Quit and reopen Premiere Pro, then open Window → UXP Plugins → Premiere Agent.
+Enable Premiere Pro Developer Mode if needed, quit and reopen Premiere Pro, then open Window → UXP Plugins → Premiere Agent.
+```
+
+Observed follow-up:
+
+```text
+After enabling Developer Mode in Premiere Pro, the Premiere Agent UXP panel appeared in Premiere.
 ```
 
 If it still does not appear, inspect the newest log under:

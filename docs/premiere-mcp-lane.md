@@ -97,7 +97,7 @@ A UXP frontend scaffold now lives in:
 premiere_uxp/
 ```
 
-Side-load it during development with Adobe UXP Developer Tool, then open `Window → UXP Plugins → Premiere Agent`. If UXP Developer Tool reports `Host Application specified is not available` even while Premiere is running, install/register the panel directly with:
+Side-load it during development with Adobe UXP Developer Tool, ensure Premiere Pro Developer Mode is enabled, then open `Window → UXP Plugins → Premiere Agent`. If UXP Developer Tool reports `Host Application specified is not available` even while Premiere is running, enable Developer Mode and install/register the panel directly with:
 
 ```bash
 python3 scripts/install_premiere_uxp.py

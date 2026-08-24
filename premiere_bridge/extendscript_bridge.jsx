@@ -652,9 +652,22 @@ function paFirstWrittenFile(outputPath) {
   }
 }
 
+function paNormalizeFolderPath(path) {
+  var raw = String(path || '');
+  try {
+    if (raw === '/tmp') return '/private/tmp';
+    if (raw.indexOf('/tmp/') === 0) return '/private' + raw;
+  } catch (err) {}
+  return raw;
+}
+
 function paEnsureFolder(path) {
-  var folder = new Folder(String(path || ''));
-  if (!folder.exists) folder.create();
+  var folder = new Folder(paNormalizeFolderPath(path));
+  if (folder.exists) return folder;
+  try {
+    if (folder.parent && !folder.parent.exists) paEnsureFolder(folder.parent.fsName);
+  } catch (parentErr) {}
+  try { folder.create(); } catch (createErr) {}
   return folder;
 }
 
@@ -766,7 +779,7 @@ function paExportSequenceReviewFrames(raw) {
   if (!isFinite(startS) || startS < 0) startS = 0;
   if (!isFinite(endS) || endS <= startS) return paJson({ ok: false, error: 'review frame range is empty or invalid' });
   var folder = paEnsureFolder(args.output_dir);
-  if (!folder.exists) return paJson({ ok: false, error: 'could not create output directory: ' + String(args.output_dir || '') });
+  if (!folder.exists) return paJson({ ok: false, error: 'could not create output directory: ' + String(args.output_dir || ''), resolved_output_dir: folder.fsName });
   var frames = [];
   var failures = [];
   var span = endS - startS;

@@ -1023,6 +1023,8 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.ok("Premiere ExtendScript duration fallback")
         if "paFindStillPreset" not in jsx or "paFindFallbackStillPreset" not in jsx or "MediaIO/systempresets" not in jsx or "ame_h264_short_proof_export" not in jsx or "exportTicks = proofIsVideo" not in jsx or "paFirstWrittenFile" not in jsx:
             R.fail("Premiere review-frame fallback", "review frames must fall back from QE to AME still/H.264 proof exports and verify file writes")
+        elif "paNormalizeFolderPath" not in jsx or "'/private' + raw" not in jsx or "resolved_output_dir" not in jsx:
+            R.fail("Premiere review-frame fallback", "review frame output dirs should normalize /tmp to /private/tmp for Premiere ExtendScript on macOS")
         else:
             R.ok("Premiere review-frame fallback")
         if "function paHasApp()" not in jsx or "return !!(typeof app !== 'undefined' && app && app.project);" not in jsx:
@@ -1061,7 +1063,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.ok("Premiere UXP manifest contract")
         if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "review-frames" not in uxp_html:
             R.fail("Premiere UXP frontend contract", "missing core UI controls")
-        elif "require(\"premierepro\")" not in uxp_js or "fetch(bridgeUrl()" not in uxp_js or "export_sequence_review_frames" not in uxp_js:
+        elif "require(\"premierepro\")" not in uxp_js or "fetch(bridgeUrl()" not in uxp_js or "export_sequence_review_frames" not in uxp_js or "/private/tmp/premiere-agent-review-frames" not in uxp_js:
             R.fail("Premiere UXP frontend contract", "missing UXP API or CEP bridge calls")
         elif "MIT" not in uxp_notice or "premiere-pro-mcp" not in uxp_notice:
             R.fail("Premiere UXP attribution", "missing MIT third-party notice")

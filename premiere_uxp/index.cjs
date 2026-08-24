@@ -6,7 +6,7 @@ try { uxp = require("uxp"); } catch (_) {}
 try { ppro = require("premierepro"); } catch (_) {}
 
 const DEFAULT_BRIDGE_URL = "http://127.0.0.1:48791/jsonrpc";
-const REVIEW_OUTPUT_DIR = "/tmp/premiere-agent-review-frames";
+const REVIEW_OUTPUT_DIR = "/private/tmp/premiere-agent-review-frames";
 
 const els = {};
 let requestCounter = 1;
