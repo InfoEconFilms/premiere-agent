@@ -514,6 +514,102 @@ function paSecondsToTicks(seconds) {
   return String(Math.round(Number(seconds || 0) * 254016000000));
 }
 
+function paTicksToSeconds(ticks) {
+  return Number(ticks) / 254016000000;
+}
+
+function paIsMacOS() {
+  return !!($.os && $.os.toLowerCase().indexOf('mac') !== -1);
+}
+
+function paAdobeAppFolders(appNamePrefix) {
+  var base = new Folder(paIsMacOS() ? '/Applications' : 'C:\\\\Program Files\\\\Adobe');
+  if (!base.exists) return [];
+  var found = [];
+  var subs = base.getFiles(function(f) { return f instanceof Folder; });
+  for (var i = 0; i < subs.length; i += 1) {
+    if (subs[i].displayName.indexOf(appNamePrefix) === 0) found.push(subs[i]);
+  }
+  found.sort(function(a, b) { return a.displayName < b.displayName ? 1 : -1; });
+  return found;
+}
+
+function paAdobeResourceFolder(appFolder, relativePath) {
+  var prefix = appFolder.fsName + (paIsMacOS() ? '/Contents/' : '/');
+  return new Folder(prefix + relativePath);
+}
+
+function paCollectEprFiles(folder, out) {
+  if (!folder || !folder.exists) return out;
+  var entries = folder.getFiles();
+  for (var i = 0; i < entries.length; i += 1) {
+    var entry = entries[i];
+    if (entry instanceof Folder) paCollectEprFiles(entry, out);
+    else if (/\.epr$/i.test(entry.name)) out.push(entry);
+  }
+  return out;
+}
+
+function paCollectAllPresets() {
+  var roots = [];
+  var ame = paAdobeAppFolders('Adobe Media Encoder');
+  for (var i = 0; i < ame.length; i += 1) roots.push(paAdobeResourceFolder(ame[i], 'MediaIO/systempresets'));
+  var ppro = paAdobeAppFolders('Adobe Premiere Pro');
+  for (var j = 0; j < ppro.length; j += 1) roots.push(paAdobeResourceFolder(ppro[j], 'Settings/IngestPresets'));
+  var userRoot = new Folder(Folder.myDocuments.fsName + '/Adobe/Adobe Media Encoder');
+  if (userRoot.exists) {
+    var versions = userRoot.getFiles(function(f) { return f instanceof Folder; });
+    for (var v = 0; v < versions.length; v += 1) roots.push(new Folder(versions[v].fsName + '/Presets'));
+  }
+  var presets = [];
+  for (var r = 0; r < roots.length; r += 1) {
+    var eprs = paCollectEprFiles(roots[r], []);
+    for (var e = 0; e < eprs.length; e += 1) {
+      presets.push({ name: decodeURI(eprs[e].displayName).replace(/\.epr$/i, ''), path: eprs[e].fsName, format: eprs[e].parent ? decodeURI(eprs[e].parent.displayName) : '' });
+    }
+  }
+  return presets;
+}
+
+function paFindStillPreset(outputPath) {
+  var wantJpeg = /\.jpe?g$/i.test(outputPath);
+  var needles = wantJpeg ? ['jpeg', 'jpg'] : ['png'];
+  var presets = paCollectAllPresets();
+  for (var n = 0; n < needles.length; n += 1) {
+    for (var i = 0; i < presets.length; i += 1) {
+      var haystack = (presets[i].name + ' ' + presets[i].format).toLowerCase();
+      if (haystack.indexOf(needles[n]) !== -1) return presets[i].path;
+    }
+  }
+  return '';
+}
+
+function paFirstWrittenFile(outputPath) {
+  var exact = new File(outputPath);
+  if (exact.exists && exact.length > 0) return exact.fsName;
+  var dir = exact.parent;
+  if (!dir || !dir.exists) return '';
+  var fullName = decodeURI(exact.name);
+  var dot = fullName.lastIndexOf('.');
+  var base = dot === -1 ? fullName : fullName.substring(0, dot);
+  var ext = dot === -1 ? '' : fullName.substring(dot).toLowerCase();
+  var matches = dir.getFiles(function(candidate) {
+    if (candidate instanceof Folder) return false;
+    var nm = decodeURI(candidate.name);
+    if (nm.indexOf(base) !== 0) return false;
+    return ext === '' || nm.toLowerCase().substring(nm.length - ext.length) === ext;
+  });
+  if (!matches || !matches.length) return '';
+  var produced = matches[0];
+  if (produced.length <= 0) return '';
+  try {
+    if (produced.fsName !== exact.fsName) produced.rename(fullName);
+    return exact.exists ? exact.fsName : produced.fsName;
+  } catch (renameErr) {
+    return produced.fsName;
+  }
+}
+
 function paEnsureFolder(path) {
   var folder = new Folder(String(path || ''));
   if (!folder.exists) folder.create();
@@ -523,24 +619,67 @@ function paEnsureFolder(path) {
 function paExportOneReviewFrame(seq, outputPath, timeS) {
   var notes = [];
   var savedPos = null;
+  var atTicks = paSecondsToTicks(timeS);
   try { if (seq.getPlayerPosition) savedPos = seq.getPlayerPosition().ticks; } catch (posErr) {}
-  try { if (seq.setPlayerPosition) seq.setPlayerPosition(paSecondsToTicks(timeS)); } catch (setErr) { notes.push('setPlayerPosition: ' + String(setErr)); }
-  var file = new File(outputPath);
-  try { if (file.exists) file.remove(); } catch (removeErr) {}
+  try { if (seq.setPlayerPosition) seq.setPlayerPosition(atTicks); } catch (setErr) { notes.push('setPlayerPosition: ' + String(setErr)); }
+  var stale = new File(outputPath);
+  try { if (stale.exists) stale.remove(); } catch (removeErr) {}
+  var wantJpeg = /\.jpe?g$/i.test(outputPath);
   try {
     app.enableQE();
     var qeSeq = qe.project.getActiveSequence();
-    if (qeSeq && qeSeq.exportFramePNG) {
-      var w = String(seq.frameSizeHorizontal || 1920);
-      var h = String(seq.frameSizeVertical || 1080);
-      try { notes.push('QE returned ' + qeSeq.exportFramePNG(outputPath, w, h)); }
-      catch (argErr) { notes.push('QE exportFramePNG: ' + String(argErr)); }
+    if (qeSeq) {
+      var fn = wantJpeg ? qeSeq.exportFrameJPEG : qeSeq.exportFramePNG;
+      if (typeof fn === 'function') {
+        var w = String(seq.frameSizeHorizontal || 1920);
+        var h = String(seq.frameSizeVertical || 1080);
+        try { notes.push('QE returned ' + fn.call(qeSeq, outputPath, w, h)); }
+        catch (argErr) {
+          try { notes.push('QE returned ' + fn.call(qeSeq, outputPath, w)); }
+          catch (argErr2) { notes.push('QE exportFrame: ' + String(argErr2)); }
+        }
+      } else {
+        notes.push('QE exportFrame unavailable');
+      }
     } else {
-      notes.push('QE exportFramePNG unavailable');
+      notes.push('QE no active sequence');
     }
   } catch (qeErr) { notes.push('QE: ' + String(qeErr)); }
-  try { if (savedPos && seq.setPlayerPosition) seq.setPlayerPosition(savedPos); } catch (restoreErr) {}
-  return { ok: file.exists, path: outputPath, time_s: timeS, method: file.exists ? 'qe_exportFramePNG' : null, notes: notes };
+  var written = paFirstWrittenFile(outputPath);
+  if (written) {
+    try { if (savedPos && seq.setPlayerPosition) seq.setPlayerPosition(savedPos); } catch (restoreErr) {}
+    return { ok: true, path: written, time_s: timeS, method: 'qe_exportFrame', notes: notes };
+  }
+  notes.push('QE wrote no file; trying one-frame Media Encoder export');
+  try {
+    var preset = paFindStillPreset(outputPath);
+    if (!preset) {
+      notes.push('AME: no ' + (wantJpeg ? 'JPEG' : 'PNG') + ' still preset found');
+    } else if (!seq.exportAsMediaDirect) {
+      notes.push('AME: sequence.exportAsMediaDirect unavailable');
+    } else {
+      var savedIn = null;
+      var savedOut = null;
+      try { if (seq.getInPointAsTime) savedIn = seq.getInPointAsTime().ticks; } catch (inErr) {}
+      try { if (seq.getOutPointAsTime) savedOut = seq.getOutPointAsTime().ticks; } catch (outErr) {}
+      try {
+        var frameTicks = Number(seq.timebase || 0);
+        var startTicks = Number(atTicks);
+        if (!isFinite(frameTicks) || frameTicks <= 0) frameTicks = 10160640000;
+        seq.setInPoint(paTicksToSeconds(startTicks));
+        seq.setOutPoint(paTicksToSeconds(startTicks + frameTicks));
+        seq.exportAsMediaDirect(outputPath, preset, app.encoder.ENCODE_IN_TO_OUT);
+        notes.push('AME preset: ' + preset);
+      } finally {
+        try { if (savedIn !== null) seq.setInPoint(paTicksToSeconds(savedIn)); } catch (restoreInErr) {}
+        try { if (savedOut !== null) seq.setOutPoint(paTicksToSeconds(savedOut)); } catch (restoreOutErr) {}
+      }
+    }
+  } catch (ameErr) { notes.push('AME: ' + String(ameErr)); }
+  try { if (savedPos && seq.setPlayerPosition) seq.setPlayerPosition(savedPos); } catch (restoreErr2) {}
+  written = paFirstWrittenFile(outputPath);
+  if (written) return { ok: true, path: written, time_s: timeS, method: 'ame_still_export', notes: notes };
+  return { ok: false, path: outputPath, time_s: timeS, method: null, notes: notes, error: 'No still frame was written by QE or Media Encoder' };
 }
 
 function paExportSequenceReviewFrames(raw) {

@@ -1015,6 +1015,10 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere ExtendScript duration fallback", "negative sequence duration must fall back to max clip end")
         else:
             R.ok("Premiere ExtendScript duration fallback")
+        if "paFindStillPreset" not in jsx or "exportAsMediaDirect" not in jsx or "paFirstWrittenFile" not in jsx:
+            R.fail("Premiere review-frame fallback", "review frames must fall back from QE to Media Encoder and verify file writes")
+        else:
+            R.ok("Premiere review-frame fallback")
         if "function paHasApp()" not in jsx or "return !!(typeof app !== 'undefined' && app && app.project);" not in jsx:
             R.fail("Premiere app availability boolean guard", "paHasApp must never serialize host project objects")
         else:
