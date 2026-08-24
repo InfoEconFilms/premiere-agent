@@ -1023,6 +1023,10 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere app availability boolean guard", "paHasApp must never serialize host project objects")
         else:
             R.ok("Premiere app availability boolean guard")
+        if "wanted === 'active_sequence'" not in jsx or "wanted === 'active'" not in jsx:
+            R.fail("Premiere active sequence alias", "JSON-RPC callers should be able to pass active_sequence for the current timeline")
+        else:
+            R.ok("Premiere active sequence alias")
         if "var projectOpen = !!paHasApp();" not in jsx or "privacy: 'This read-only check intentionally omits" not in jsx:
             R.fail("Premiere verify privacy guard", "verify_premiere_connection must return booleans, not host objects")
         else:

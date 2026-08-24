@@ -146,7 +146,7 @@ function paSequenceSummary(seq) {
 function paFindSequence(sequenceId) {
   if (!paHasApp()) return null;
   var wanted = sequenceId ? String(sequenceId) : null;
-  if (!wanted) return paActiveSequence();
+  if (!wanted || wanted === 'active_sequence' || wanted === 'active') return paActiveSequence();
   var seqs = app.project.sequences;
   if (!seqs) return paActiveSequence();
   try {
