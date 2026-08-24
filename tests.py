@@ -968,6 +968,10 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere ExtendScript duration fallback", "negative sequence duration must fall back to max clip end")
         else:
             R.ok("Premiere ExtendScript duration fallback")
+        if "function paHasApp()" not in jsx or "return !!(typeof app !== 'undefined' && app && app.project);" not in jsx:
+            R.fail("Premiere app availability boolean guard", "paHasApp must never serialize host project objects")
+        else:
+            R.ok("Premiere app availability boolean guard")
         if "var projectOpen = !!paHasApp();" not in jsx or "privacy: 'This read-only check intentionally omits" not in jsx:
             R.fail("Premiere verify privacy guard", "verify_premiere_connection must return booleans, not host objects")
         else:

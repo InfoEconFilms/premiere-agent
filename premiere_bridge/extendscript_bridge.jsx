@@ -50,7 +50,7 @@ function paParse(raw) {
 }
 
 function paHasApp() {
-  return typeof app !== 'undefined' && app && app.project;
+  return !!(typeof app !== 'undefined' && app && app.project);
 }
 
 function paActiveSequence() {
