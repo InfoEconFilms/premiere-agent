@@ -890,19 +890,19 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         else:
             R.ok("MCP list markers dry-run")
 
-        review_dry = pam.handle("tools/call", {"name": "premiere_agent_export_review_frames", "arguments": {"sequence_id": "seq1", "output_dir": str(tmp / "frames"), "backup_sequence_id": "backup1", "confirm": True}})
+        review_dry = pam.handle("tools/call", {"name": "premiere_agent_export_review_frames", "arguments": {"sequence_id": "seq1", "output_dir": str(tmp / "frames")}})
         if "export_sequence_review_frames" not in review_dry["content"][0]["text"] or "dry_run" not in review_dry["content"][0]["text"]:
             R.fail("MCP export review frames dry-run", review_dry["content"][0]["text"])
         else:
             R.ok("MCP export review frames dry-run")
 
-        captions_dry = pam.handle("tools/call", {"name": "premiere_agent_import_captions", "arguments": {"sequence_id": "seq1", "caption_path": str(tmp / "master.srt"), "backup_sequence_id": "backup1", "confirm": True}})
+        captions_dry = pam.handle("tools/call", {"name": "premiere_agent_import_captions", "arguments": {"sequence_id": "seq1", "caption_path": str(tmp / "master.srt")}})
         if "import_captions" not in captions_dry["content"][0]["text"] or "dry_run" not in captions_dry["content"][0]["text"]:
             R.fail("MCP import captions dry-run", captions_dry["content"][0]["text"])
         else:
             R.ok("MCP import captions dry-run")
 
-        editorial_dry = pam.handle("tools/call", {"name": "premiere_agent_add_editorial_markers", "arguments": {"sequence_id": "seq1", "notes": [{"time_s": 2, "kind": "retake", "label": "AI RETAKE"}], "backup_sequence_id": "backup1", "confirm": True}})
+        editorial_dry = pam.handle("tools/call", {"name": "premiere_agent_add_editorial_markers", "arguments": {"sequence_id": "seq1", "notes": [{"time_s": 2, "kind": "retake", "label": "AI RETAKE"}]}})
         if "add_editorial_markers" not in editorial_dry["content"][0]["text"] or "dry_run" not in editorial_dry["content"][0]["text"]:
             R.fail("MCP add editorial markers dry-run", editorial_dry["content"][0]["text"])
         else:
@@ -915,7 +915,14 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         else:
             R.ok("MCP live job plan")
 
-        denied = pam.handle("tools/call", {"name": "premiere_agent_add_marker", "arguments": {"sequence_id": "seq1", "time_s": 1.0, "label": "NOTE"}})
+        dry_no_confirm = pam.handle("tools/call", {"name": "premiere_agent_add_marker", "arguments": {"sequence_id": "seq1", "time_s": 1.0, "label": "NOTE"}})
+        dry_no_confirm_text = dry_no_confirm["content"][0]["text"]
+        if dry_no_confirm.get("isError") or "dry_run" not in dry_no_confirm_text or "add_marker" not in dry_no_confirm_text:
+            R.fail("MCP live write dry-run without consent", str(dry_no_confirm))
+        else:
+            R.ok("MCP live write dry-run without consent")
+
+        denied = pam.handle("tools/call", {"name": "premiere_agent_add_marker", "arguments": {"sequence_id": "seq1", "time_s": 1.0, "label": "NOTE", "dry_run": False}})
         if not denied.get("isError") or "confirm=True" not in denied["content"][0]["text"]:
             R.fail("MCP live write safety gate", str(denied))
         else:

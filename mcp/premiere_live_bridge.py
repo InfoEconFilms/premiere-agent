@@ -149,7 +149,8 @@ class PremiereLiveBridge:
         return self._request(BridgeRequest("list_markers", payload, dry_run=dry_run)).to_dict()
 
     def duplicate_sequence(self, sequence_id: str, backup_name: str | None = None, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
-        _require_confirm("duplicate_sequence", confirm)
+        if not dry_run:
+            _require_confirm("duplicate_sequence", confirm)
         payload = {"sequence_id": sequence_id, "backup_name": backup_name or f"{sequence_id}_AI_BACKUP"}
         return self._request(BridgeRequest("duplicate_sequence", payload, dry_run=dry_run)).to_dict()
 
@@ -165,8 +166,9 @@ class PremiereLiveBridge:
         confirm: bool = False,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        _require_confirm("add_marker", confirm)
-        _require_backup("add_marker", backup_sequence_id)
+        if not dry_run:
+            _require_confirm("add_marker", confirm)
+            _require_backup("add_marker", backup_sequence_id)
         payload = {
             "sequence_id": sequence_id,
             "backup_sequence_id": backup_sequence_id,
@@ -187,8 +189,9 @@ class PremiereLiveBridge:
         confirm: bool = False,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        _require_confirm("add_editorial_markers", confirm)
-        _require_backup("add_editorial_markers", backup_sequence_id)
+        if not dry_run:
+            _require_confirm("add_editorial_markers", confirm)
+            _require_backup("add_editorial_markers", backup_sequence_id)
         if not isinstance(notes, list) or not notes:
             raise BridgeError("add_editorial_markers requires a non-empty notes list")
         payload = {
@@ -211,8 +214,9 @@ class PremiereLiveBridge:
         confirm: bool = False,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        _require_confirm("export_sequence_review_frames", confirm)
-        _require_backup("export_sequence_review_frames", backup_sequence_id)
+        if not dry_run:
+            _require_confirm("export_sequence_review_frames", confirm)
+            _require_backup("export_sequence_review_frames", backup_sequence_id)
         out = Path(output_dir).expanduser().resolve()
         payload = {
             "sequence_id": sequence_id,
@@ -235,8 +239,9 @@ class PremiereLiveBridge:
         confirm: bool = False,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        _require_confirm("import_captions", confirm)
-        _require_backup("import_captions", backup_sequence_id)
+        if not dry_run:
+            _require_confirm("import_captions", confirm)
+            _require_backup("import_captions", backup_sequence_id)
         captions = Path(caption_path).expanduser().resolve()
         payload = {
             "sequence_id": sequence_id,
@@ -258,8 +263,9 @@ class PremiereLiveBridge:
         confirm: bool = False,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        _require_confirm("import_media", confirm)
-        _require_backup("import_media", backup_sequence_id)
+        if not dry_run:
+            _require_confirm("import_media", confirm)
+            _require_backup("import_media", backup_sequence_id)
         media = Path(media_path).expanduser().resolve()
         payload = {
             "sequence_id": sequence_id,
@@ -282,10 +288,11 @@ class PremiereLiveBridge:
         confirm: bool = False,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        _require_confirm("queue_export", confirm)
-        # Export is not timeline-destructive, but a backup id proves the caller
-        # has consciously identified a safe sequence state before rendering.
-        _require_backup("queue_export", backup_sequence_id)
+        if not dry_run:
+            _require_confirm("queue_export", confirm)
+            # Export is not timeline-destructive, but a backup id proves the caller
+            # has consciously identified a safe sequence state before rendering.
+            _require_backup("queue_export", backup_sequence_id)
         payload = {
             "sequence_id": sequence_id,
             "backup_sequence_id": backup_sequence_id,
