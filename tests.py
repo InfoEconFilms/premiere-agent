@@ -1068,10 +1068,12 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere UXP manifest contract", "minVersion should match local Premiere UXP registration convention: 25.6")
         else:
             R.ok("Premiere UXP manifest contract")
-        if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "review-frames" not in uxp_html:
+        if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "review-frames" not in uxp_html or "add-editorial-markers" not in uxp_html or "import-captions" not in uxp_html:
             R.fail("Premiere UXP frontend contract", "missing core UI controls")
-        elif "require(\"premierepro\")" not in uxp_js or "fetch(bridgeUrl()" not in uxp_js or "export_sequence_review_frames" not in uxp_js or "/private/tmp/premiere-agent-review-frames" not in uxp_js:
+        elif "require(\"premierepro\")" not in uxp_js or "fetch(bridgeUrl()" not in uxp_js or "export_sequence_review_frames" not in uxp_js or "add_editorial_markers" not in uxp_js or "import_captions" not in uxp_js or "/private/tmp/premiere-agent-review-frames" not in uxp_js:
             R.fail("Premiere UXP frontend contract", "missing UXP API or CEP bridge calls")
+        elif "checkedLiveWritePayload" not in uxp_js or "backup_sequence_id" not in uxp_js:
+            R.fail("Premiere UXP live-write safety", "live-write controls must require backup identity and confirmation")
         elif "MIT" not in uxp_notice or "premiere-pro-mcp" not in uxp_notice:
             R.fail("Premiere UXP attribution", "missing MIT third-party notice")
         else:

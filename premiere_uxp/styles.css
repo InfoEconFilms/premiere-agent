@@ -88,7 +88,8 @@ dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spa
 dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 
 label { display: block; margin: 10px 0 4px; color: var(--muted); }
-input {
+input,
+textarea {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -96,6 +97,24 @@ input {
   background: #18191c;
   padding: 7px;
 }
+textarea {
+  min-height: 76px;
+  resize: vertical;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.check-row input { width: auto; }
+.hint { color: var(--muted); font-size: 10px; }
 button {
   border: 1px solid transparent;
   border-radius: 6px;
@@ -107,6 +126,7 @@ button {
 button.secondary { background: #4c4f59; }
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 pre:focus-visible {
   outline: 2px solid #c7b8ff;
   outline-offset: 2px;

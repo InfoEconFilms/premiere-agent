@@ -52,6 +52,44 @@
   <section class="card">
     <div class="card-head">
       <div>
+        <h2>Live write tools</h2>
+        <p>Batch editorial markers and caption imports. Use only after backing up or duplicating the active sequence.</p>
+      </div>
+    </div>
+    <label class="check-row"><input id="live-confirm" type="checkbox"> I have backed up/duplicated the active sequence for this test.</label>
+    <label for="backup-id">Backup sequence ID/name</label>
+    <input id="backup-id" placeholder="e.g. altyeb_aggressive_sentence_story Copy Copy BACKUP" spellcheck="false" autocomplete="off">
+
+    <label for="marker-notes">Editorial marker notes <span class="hint">time | label | comment</span></label>
+    <textarea id="marker-notes" spellcheck="false">0 | AI REVIEW START | Start of review range
+4 | AI CHECK | Review gesture/timing here
+8 | AI CHECK | Review sentence flow here</textarea>
+    <div class="actions">
+      <button id="add-editorial-markers">Add editorial markers</button>
+    </div>
+
+    <label for="caption-path">Caption file path (.srt or .vtt)</label>
+    <input id="caption-path" placeholder="/absolute/path/to/master.srt" spellcheck="false" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="caption-start">Start seconds</label>
+        <input id="caption-start" value="0" inputmode="decimal">
+      </div>
+      <div>
+        <label for="caption-format">Caption format</label>
+        <input id="caption-format" value="subtitle" spellcheck="false">
+      </div>
+    </div>
+    <div class="actions">
+      <button id="choose-caption" class="secondary">Choose caption file</button>
+      <button id="import-captions">Import captions</button>
+    </div>
+    <p class="help">The bridge imports caption files into the project bin and reports whether Premiere exposes caption-track creation.</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
         <h2>Safety posture</h2>
         <p>UXP first for documented APIs; CEP/QE only as an explicit fallback.</p>
       </div>

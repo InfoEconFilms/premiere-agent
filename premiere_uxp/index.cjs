@@ -27,7 +27,9 @@ document.addEventListener("DOMContentLoaded", () => {
   for (const id of [
     "uxp-pill", "cep-pill", "bridge-url", "refresh-state", "check-bridge",
     "list-markers", "review-frames", "copy-result", "status",
-    "project-state", "sequence-state", "playhead-state", "host-state"
+    "project-state", "sequence-state", "playhead-state", "host-state",
+    "live-confirm", "backup-id", "marker-notes", "add-editorial-markers",
+    "caption-path", "caption-start", "caption-format", "choose-caption", "import-captions"
   ]) els[id] = document.getElementById(id);
 
   if (els["bridge-url"] && !els["bridge-url"].value) els["bridge-url"].value = DEFAULT_BRIDGE_URL;
@@ -35,6 +37,9 @@ document.addEventListener("DOMContentLoaded", () => {
   bind("check-bridge", "click", verifyCepBridge);
   bind("list-markers", "click", listMarkers);
   bind("review-frames", "click", exportReviewFrames);
+  bind("add-editorial-markers", "click", addEditorialMarkers);
+  bind("choose-caption", "click", chooseCaptionFile);
+  bind("import-captions", "click", importCaptions);
   bind("copy-result", "click", copyResult);
   setPill("uxp-pill", ppro ? "UXP ready" : "UXP unavailable", ppro ? "ok" : "err");
   refreshState();
@@ -132,6 +137,65 @@ async function exportReviewFrames() {
     range_start_s: 0,
     range_end_s: 12
   });
+}
+
+function checkedLiveWritePayload() {
+  const confirmed = !!(els["live-confirm"] && els["live-confirm"].checked);
+  const backupId = els["backup-id"] && els["backup-id"].value ? els["backup-id"].value.trim() : "";
+  if (!confirmed) throw new Error("Tick the live-write confirmation after backing up/duplicating the active sequence.");
+  if (!backupId) throw new Error("Enter the backup sequence ID/name before live-write actions.");
+  return { sequence_id: "active_sequence", backup_sequence_id: backupId };
+}
+
+function parseMarkerNotes(text) {
+  const notes = [];
+  const lines = String(text || "").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.charAt(0) === "#") continue;
+    const parts = trimmed.indexOf("|") !== -1 ? trimmed.split("|") : trimmed.split(",");
+    const timeS = Number((parts[0] || "").trim());
+    if (!isFinite(timeS) || timeS < 0) throw new Error("Bad marker time in line: " + line);
+    const label = (parts[1] || "AI EDITORIAL NOTE").trim() || "AI EDITORIAL NOTE";
+    const comment = (parts.slice(2).join("|") || "").trim();
+    notes.push({ time_s: timeS, kind: "uxp_editorial_note", label, comment, color_index: 1 });
+  }
+  if (!notes.length) throw new Error("Add at least one marker note line: time | label | comment");
+  return notes;
+}
+
+async function addEditorialMarkers() {
+  const safe = checkedLiveWritePayload();
+  return cepRpc("add_editorial_markers", Object.assign(safe, {
+    default_color: "red",
+    notes: parseMarkerNotes(els["marker-notes"] ? els["marker-notes"].value : "")
+  }));
+}
+
+async function chooseCaptionFile() {
+  if (!uxp || !uxp.storage || !uxp.storage.localFileSystem || typeof uxp.storage.localFileSystem.getFileForOpening !== "function") {
+    throw new Error("UXP file picker unavailable; paste an absolute .srt/.vtt path instead.");
+  }
+  const file = await uxp.storage.localFileSystem.getFileForOpening({ types: ["srt", "vtt"] });
+  if (!file) return null;
+  const path = file.nativePath || file.fsName || file.path || "";
+  if (!path) throw new Error("Selected file did not expose a native path; paste the absolute caption path instead.");
+  if (els["caption-path"]) els["caption-path"].value = path;
+  show({ ok: true, selected_caption_path: path });
+  return path;
+}
+
+async function importCaptions() {
+  const safe = checkedLiveWritePayload();
+  const path = els["caption-path"] && els["caption-path"].value ? els["caption-path"].value.trim() : "";
+  if (!path) throw new Error("Choose or paste an absolute .srt/.vtt caption path first.");
+  const start = Number(els["caption-start"] && els["caption-start"].value ? els["caption-start"].value : 0);
+  if (!isFinite(start) || start < 0) throw new Error("Caption start seconds must be a non-negative number.");
+  return cepRpc("import_captions", Object.assign(safe, {
+    caption_path: path,
+    start_s: start,
+    caption_format: els["caption-format"] && els["caption-format"].value ? els["caption-format"].value.trim() : "subtitle"
+  }));
 }
 
 async function copyResult() {

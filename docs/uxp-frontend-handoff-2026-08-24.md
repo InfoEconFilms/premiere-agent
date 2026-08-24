@@ -85,6 +85,8 @@ Current UXP panel controls:
 - verify CEP live bridge;
 - list markers;
 - export review frames;
+- add batch editorial markers with a required backup ID/name and confirmation checkbox;
+- choose/paste an SRT/VTT path and import captions through the CEP bridge scaffold;
 - show/copy latest JSON result.
 
 The UI scaffold adapts MIT-licensed patterns from:
