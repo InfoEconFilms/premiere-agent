@@ -867,10 +867,22 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
 
         spec = pam.handle("tools/call", {"name": "premiere_agent_live_bridge_protocol_spec", "arguments": {}})
         spec_text = spec["content"][0]["text"]
-        if "duplicate_sequence" not in spec_text or "JSON-RPC" not in spec_text:
+        if "duplicate_sequence" not in spec_text or "JSON-RPC" not in spec_text or "verify_premiere_connection" not in spec_text or "get_sequence_structure" not in spec_text:
             R.fail("MCP live bridge protocol spec", spec_text)
         else:
             R.ok("MCP live bridge protocol spec")
+
+        conn = pam.handle("tools/call", {"name": "premiere_agent_verify_premiere_connection", "arguments": {}})
+        if "verify_premiere_connection" not in conn["content"][0]["text"] or "dry_run" not in conn["content"][0]["text"]:
+            R.fail("MCP verify connection dry-run", conn["content"][0]["text"])
+        else:
+            R.ok("MCP verify connection dry-run")
+
+        structure = pam.handle("tools/call", {"name": "premiere_agent_get_sequence_structure", "arguments": {"sequence_id": "seq1"}})
+        if "get_sequence_structure" not in structure["content"][0]["text"] or "dry_run" not in structure["content"][0]["text"]:
+            R.fail("MCP get sequence structure dry-run", structure["content"][0]["text"])
+        else:
+            R.ok("MCP get sequence structure dry-run")
 
         plan_call = pam.handle("tools/call", {"name": "premiere_agent_plan_live_job", "arguments": {"job_type": "batch_export", "sequence_id": "seq1"}})
         plan_text = plan_call["content"][0]["text"]
@@ -899,6 +911,16 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge server status", str(status))
         else:
             R.ok("Premiere bridge server status")
+        verified = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 11, "method": "verify_premiere_connection", "params": {}})
+        if not verified or verified.get("result", {}).get("overall") != "ready" or verified.get("result", {}).get("mutates_project") is not False:
+            R.fail("Premiere bridge verify connection", str(verified))
+        else:
+            R.ok("Premiere bridge verify connection")
+        seq_struct = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 12, "method": "get_sequence_structure", "params": {}})
+        if not seq_struct or not seq_struct.get("result", {}).get("video_tracks") or seq_struct.get("result", {}).get("verification", {}).get("mutates_project") is not False:
+            R.fail("Premiere bridge sequence structure", str(seq_struct))
+        else:
+            R.ok("Premiere bridge sequence structure")
         dup = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 2, "method": "duplicate_sequence", "params": {"sequence_id": "seq_main", "backup_name": "AI_BACKUP"}})
         backup_id = ((dup or {}).get("result") or {}).get("backup_sequence_id")
         marker = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 3, "method": "add_marker", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "time_s": 12.5, "label": "EDITOR NOTE"}})
@@ -932,7 +954,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere CEP manifest contract", manifest[:500])
         else:
             R.ok("Premiere CEP manifest contract")
-        for fn in ("paStatus", "paGetActiveSequence", "paSnapshotSequence", "paDuplicateSequence", "paAddMarker", "paImportMedia", "paQueueExport"):
+        for fn in ("paStatus", "paVerifyPremiereConnection", "paGetActiveSequence", "paSnapshotSequence", "paGetSequenceStructure", "paDuplicateSequence", "paAddMarker", "paImportMedia", "paQueueExport"):
             if ("function " + fn) not in jsx:
                 R.fail("Premiere ExtendScript function contract", fn)
                 break
@@ -949,7 +971,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         js = (bridge_dir / "main.js").read_text(encoding="utf-8")
         transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
         shim = (bridge_dir / "lib" / "CSInterface.js").read_text(encoding="utf-8")
-        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport:
+        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport or "verify_premiere_connection" not in transport or "get_sequence_structure" not in transport:
             R.fail("Premiere CEP HTTP transport contract", "missing transport wiring")
         else:
             R.ok("Premiere CEP HTTP transport contract")

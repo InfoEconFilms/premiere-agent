@@ -209,6 +209,19 @@ def live_bridge_status(bridge_url: str | None = None, dry_run: bool = True) -> d
     return PremiereLiveBridge(bridge_url).status(dry_run=dry_run)
 
 
+def live_bridge_verify_connection(bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).verify_premiere_connection(dry_run=dry_run)
+
+
+def live_bridge_get_sequence_structure(
+    sequence_id: str | None = None,
+    *,
+    bridge_url: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_sequence_structure(sequence_id, dry_run=dry_run)
+
+
 def live_bridge_plan(job_type: str, sequence_id: str, requested_outputs: list[str] | None = None) -> dict[str, Any]:
     return plan_live_premiere_job(job_type, sequence_id, requested_outputs=requested_outputs)  # type: ignore[arg-type]
 
@@ -312,6 +325,16 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Check the configured live Premiere bridge status; dry-run by default if no bridge is running.",
         "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
         "handler": lambda a: live_bridge_status(a.get("bridge_url"), a.get("dry_run", True)),
+    },
+    "premiere_agent_verify_premiere_connection": {
+        "description": "Run a safe, read-only first-run check of the Premiere panel, project, and active sequence without exposing project/media names.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_verify_connection(a.get("bridge_url"), a.get("dry_run", True)),
+    },
+    "premiere_agent_get_sequence_structure": {
+        "description": "Read the active Premiere sequence structure: tracks, clips, gaps, playhead, and safe host-snapshot verification data.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_get_sequence_structure(a.get("sequence_id"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_plan_live_job": {
         "description": "Plan a safety-gated live Premiere job before mutating a sequence.",

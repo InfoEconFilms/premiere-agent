@@ -86,6 +86,37 @@ class MockPremiereBackend:
         seq = self._sequence(self.active_sequence_id)
         return {"ok": True, "sequence": self._public_sequence(seq)}
 
+    def verify_premiere_connection(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "backend": "mock",
+            "overall": "ready",
+            "checks": {
+                "bridge_reachable": True,
+                "premiere_project_open": True,
+                "active_sequence_open": True,
+                "read_only_snapshot_ok": True,
+                "duration_non_negative_or_null": True,
+                "track_collections_readable": True,
+            },
+            "privacy": "Mock read-only check omits project/media details.",
+            "mutates_project": False,
+        }
+
+    def get_sequence_structure(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq_id = params.get("sequence_id") or self.active_sequence_id
+        seq = self._sequence(str(seq_id))
+        video_clips = seq.get("clips") or []
+        return {
+            "ok": True,
+            "sequence": self._public_sequence(seq),
+            "playhead_s": 0.0,
+            "total_clip_count": len(video_clips),
+            "video_tracks": [{"type": "video", "index": 0, "name": "V1", "clip_count": len(video_clips), "muted": None, "locked": None, "clips": video_clips, "gaps": []}],
+            "audio_tracks": [{"type": "audio", "index": 0, "name": "A1", "clip_count": 0, "muted": False, "locked": None, "clips": [], "gaps": []}],
+            "verification": {"kind": "mock_sequence_structure", "boundary": "mock_snapshot", "mutates_project": False},
+        }
+
     def snapshot_sequence(self, params: dict[str, Any]) -> dict[str, Any]:
         seq_id = params.get("sequence_id") or self.active_sequence_id
         seq = self._sequence(seq_id)

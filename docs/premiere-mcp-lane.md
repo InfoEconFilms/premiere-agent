@@ -33,6 +33,8 @@ It exposes safe tools plus dry-run live-bridge planning tools:
 | `premiere_agent_nle_safety_checklist` | read-only | Return the mandatory safety steps before live-NLE mutation. |
 | `premiere_agent_live_bridge_protocol_spec` | read-only | Return the JSON-RPC contract a CEP/UXP bridge must implement. |
 | `premiere_agent_live_bridge_status` | read-only/dry-run | Check bridge connectivity or produce the request shape when no bridge is configured. |
+| `premiere_agent_verify_premiere_connection` | read-only/dry-run | First-run safety probe: bridge reachable, project open, active sequence readable, no names/paths/media details returned. |
+| `premiere_agent_get_sequence_structure` | read-only/dry-run | Read tracks, clips, gaps, playhead, and host-snapshot verification for the active/target sequence. |
 | `premiere_agent_plan_live_job` | read-only | Build an orchestrator plan for talking-head, batch-export, motion-graphic, or caption jobs. |
 | `premiere_agent_duplicate_sequence` | write, dry-run default | Duplicate/backup a sequence; requires `confirm=true` for live execution. |
 | `premiere_agent_add_marker` | write, dry-run default | Add a sequence marker; requires `confirm=true` and `backup_sequence_id`. |
@@ -85,7 +87,7 @@ python scripts/install_premiere_bridge.py
 
 That installs a symlink into the Adobe CEP extensions folder and enables unsigned CEP debug mode on macOS. Restart Premiere, then open `Window → Extensions → Premiere Agent Bridge`.
 
-The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end without Premiere. The CEP panel now exposes the same endpoint from inside Premiere when opened. It loads `extendscript_bridge.jsx`, which implements real read probes (`status`, active project/sequence, sequence snapshots) and guarded write attempts for backup, markers, media import, and export handoff where Premiere exposes the needed APIs.
+The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end without Premiere. The CEP panel now exposes the same endpoint from inside Premiere when opened. It loads `extendscript_bridge.jsx`, which implements real read probes (`status`, sanitized `verify_premiere_connection`, active project/sequence, sequence snapshots, richer `get_sequence_structure`) and guarded write attempts for backup, markers, media import, and export handoff where Premiere exposes the needed APIs.
 
 The bridge should accept JSON-RPC 2.0 POST requests:
 
@@ -108,9 +110,11 @@ The bridge should accept JSON-RPC 2.0 POST requests:
 Required read methods:
 
 - `status`
+- `verify_premiere_connection`
 - `get_active_project`
 - `get_active_sequence`
 - `snapshot_sequence`
+- `get_sequence_structure`
 
 Initial write methods:
 

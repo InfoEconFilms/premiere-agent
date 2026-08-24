@@ -181,6 +181,43 @@ function paStatus(raw) {
   });
 }
 
+function paVerifyPremiereConnection(raw) {
+  var projectOpen = paHasApp();
+  var seq = projectOpen ? paActiveSequence() : null;
+  var sequenceOpen = !!seq;
+  var snapshotReadable = false;
+  var durationValid = false;
+  var trackReadable = false;
+  try {
+    if (seq) {
+      var duration = paSequenceDurationSeconds(seq);
+      durationValid = duration === null || (isFinite(duration) && duration >= 0);
+      trackReadable = !!(seq.videoTracks && seq.audioTracks);
+      snapshotReadable = trackReadable;
+    }
+  } catch (err) {}
+  var overall = 'unreachable';
+  if (projectOpen && sequenceOpen && snapshotReadable && durationValid) overall = 'ready';
+  else if (projectOpen && !sequenceOpen) overall = 'needs_active_sequence';
+  else if (projectOpen) overall = 'needs_readable_sequence';
+  return paJson({
+    ok: true,
+    backend: 'cep_extendscript',
+    overall: overall,
+    checks: {
+      bridge_reachable: true,
+      premiere_project_open: projectOpen,
+      active_sequence_open: sequenceOpen,
+      read_only_snapshot_ok: snapshotReadable,
+      duration_non_negative_or_null: durationValid,
+      track_collections_readable: trackReadable
+    },
+    privacy: 'This read-only check intentionally omits project names, paths, media paths, and clip names.',
+    mutates_project: false,
+    next_step: overall === 'ready' ? 'Safe to call get_sequence_structure or make an explicitly confirmed backup.' : 'Open a Premiere project and active sequence, then retry.'
+  });
+}
+
 function paGetActiveProject(raw) {
   if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
   var seqCount = null;
@@ -230,6 +267,103 @@ function paSnapshotSequence(raw) {
     verification: {
       kind: 'premiere_sequence_snapshot',
       note: 'CEP ExtendScript snapshot; export a still/contact sheet separately when visual proof is needed.'
+    }
+  });
+}
+
+function paClipSummary(clip, trackType, trackIndex, clipIndex) {
+  var startS = null;
+  var endS = null;
+  var durationS = null;
+  var inS = null;
+  var outS = null;
+  try { if (clip.start && clip.start.seconds !== undefined) startS = Number(clip.start.seconds); } catch (err1) {}
+  try { if (clip.end && clip.end.seconds !== undefined) endS = Number(clip.end.seconds); } catch (err2) {}
+  try { if (clip.duration && clip.duration.seconds !== undefined) durationS = Number(clip.duration.seconds); } catch (err3) {}
+  try { if (clip.inPoint && clip.inPoint.seconds !== undefined) inS = Number(clip.inPoint.seconds); } catch (err4) {}
+  try { if (clip.outPoint && clip.outPoint.seconds !== undefined) outS = Number(clip.outPoint.seconds); } catch (err5) {}
+  var enabled = null;
+  try { if (typeof clip.isDisabled === 'function') enabled = !clip.isDisabled(); } catch (err6) {}
+  return {
+    track_type: trackType,
+    track_index: trackIndex,
+    clip_index: clipIndex,
+    id: String(clip.nodeId || clip.guid || clip.name || (trackType + trackIndex + '_' + clipIndex)),
+    name: String(clip.name || ''),
+    start_s: startS,
+    end_s: endS,
+    duration_s: durationS,
+    in_s: inS,
+    out_s: outS,
+    enabled: enabled
+  };
+}
+
+function paTrackStructure(track, trackType, trackIndex) {
+  var clips = [];
+  var gaps = [];
+  var previousEnd = 0;
+  try {
+    for (var c = 0; c < track.clips.numItems; c += 1) {
+      var clipInfo = paClipSummary(track.clips[c], trackType, trackIndex, c);
+      if (clipInfo.start_s !== null && previousEnd !== null && clipInfo.start_s > previousEnd) {
+        gaps.push({ start_s: previousEnd, end_s: clipInfo.start_s, duration_s: clipInfo.start_s - previousEnd });
+      }
+      if (clipInfo.end_s !== null && (previousEnd === null || clipInfo.end_s > previousEnd)) previousEnd = clipInfo.end_s;
+      clips.push(clipInfo);
+    }
+  } catch (err) {}
+  var muted = null;
+  var locked = null;
+  try { if (typeof track.isMuted === 'function') muted = track.isMuted(); } catch (muteErr) {}
+  try { if (typeof track.isLocked === 'function') locked = track.isLocked(); } catch (lockErr) {}
+  return {
+    type: trackType,
+    index: trackIndex,
+    name: String(track.name || (trackType.toUpperCase() + String(trackIndex + 1))),
+    clip_count: clips.length,
+    muted: muted,
+    locked: locked,
+    clips: clips,
+    gaps: gaps
+  };
+}
+
+function paGetSequenceStructure(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', requested_sequence_id: args.sequence_id || null });
+  var videoTracks = [];
+  var audioTracks = [];
+  try {
+    for (var vt = 0; vt < seq.videoTracks.numTracks; vt += 1) {
+      videoTracks.push(paTrackStructure(seq.videoTracks[vt], 'video', vt));
+    }
+  } catch (vErr) {}
+  try {
+    for (var at = 0; at < seq.audioTracks.numTracks; at += 1) {
+      audioTracks.push(paTrackStructure(seq.audioTracks[at], 'audio', at));
+    }
+  } catch (aErr) {}
+  var playheadS = null;
+  try {
+    var pos = seq.getPlayerPosition ? seq.getPlayerPosition() : null;
+    if (pos && pos.seconds !== undefined) playheadS = Number(pos.seconds);
+  } catch (posErr) {}
+  var clipTotal = 0;
+  for (var vi = 0; vi < videoTracks.length; vi += 1) clipTotal += videoTracks[vi].clip_count;
+  for (var ai = 0; ai < audioTracks.length; ai += 1) clipTotal += audioTracks[ai].clip_count;
+  return paJson({
+    ok: true,
+    sequence: paSequenceSummary(seq),
+    playhead_s: playheadS,
+    total_clip_count: clipTotal,
+    video_tracks: videoTracks,
+    audio_tracks: audioTracks,
+    verification: {
+      kind: 'premiere_sequence_structure',
+      boundary: 'host_snapshot',
+      mutates_project: false
     }
   });
 }

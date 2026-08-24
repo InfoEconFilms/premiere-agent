@@ -21,6 +21,8 @@
     get_active_project: 'paGetActiveProject',
     get_active_sequence: 'paGetActiveSequence',
     snapshot_sequence: 'paSnapshotSequence',
+    get_sequence_structure: 'paGetSequenceStructure',
+    verify_premiere_connection: 'paVerifyPremiereConnection',
     duplicate_sequence: 'paDuplicateSequence',
     add_marker: 'paAddMarker',
     import_media: 'paImportMedia',

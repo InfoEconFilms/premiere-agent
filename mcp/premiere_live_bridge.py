@@ -26,9 +26,11 @@ DEFAULT_BRIDGE_ENV = "PREMIERE_AGENT_BRIDGE_URL"
 
 READ_ACTIONS = {
     "status",
+    "verify_premiere_connection",
     "get_active_project",
     "get_active_sequence",
     "snapshot_sequence",
+    "get_sequence_structure",
 }
 WRITE_ACTIONS = {
     "duplicate_sequence",
@@ -128,8 +130,15 @@ class PremiereLiveBridge:
     def status(self, *, dry_run: bool = False) -> dict[str, Any]:
         return self._request(BridgeRequest("status", {}, dry_run=dry_run)).to_dict()
 
+    def verify_premiere_connection(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("verify_premiere_connection", {}, dry_run=dry_run)).to_dict()
+
     def get_active_sequence(self, *, dry_run: bool = False) -> dict[str, Any]:
         return self._request(BridgeRequest("get_active_sequence", {}, dry_run=dry_run)).to_dict()
+
+    def get_sequence_structure(self, sequence_id: str | None = None, *, dry_run: bool = False) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id} if sequence_id else {}
+        return self._request(BridgeRequest("get_sequence_structure", payload, dry_run=dry_run)).to_dict()
 
     def duplicate_sequence(self, sequence_id: str, backup_name: str | None = None, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
         _require_confirm("duplicate_sequence", confirm)
