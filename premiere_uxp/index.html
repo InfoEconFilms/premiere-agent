@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none'; base-uri 'none'">
+  <title>Premiere Agent</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Econ Films</p>
+      <h1>Premiere Agent</h1>
+    </div>
+    <span id="uxp-pill" class="pill warn">starting</span>
+  </header>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Premiere state</h2>
+        <p>Read-only UXP probe from the active project/sequence.</p>
+      </div>
+      <button id="refresh-state">Refresh</button>
+    </div>
+    <dl class="grid">
+      <div><dt>Project</dt><dd id="project-state">—</dd></div>
+      <div><dt>Sequence</dt><dd id="sequence-state">—</dd></div>
+      <div><dt>Playhead</dt><dd id="playhead-state">—</dd></div>
+      <div><dt>Host</dt><dd id="host-state">Premiere UXP</dd></div>
+    </dl>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>CEP live bridge</h2>
+        <p>Uses the proven local JSON-RPC bridge while UXP-native transport matures.</p>
+      </div>
+      <span id="cep-pill" class="pill warn">unchecked</span>
+    </div>
+    <label for="bridge-url">Bridge URL</label>
+    <input id="bridge-url" value="http://127.0.0.1:48791/jsonrpc" spellcheck="false" autocomplete="off">
+    <div class="actions">
+      <button id="check-bridge">Verify</button>
+      <button id="list-markers">List markers</button>
+      <button id="review-frames">Review frames</button>
+    </div>
+    <p class="help">Writes remain safety-gated in the bridge. Review-frame export uses the existing backup token and writes to <code>/tmp/premiere-agent-review-frames</code>.</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Safety posture</h2>
+        <p>UXP first for documented APIs; CEP/QE only as an explicit fallback.</p>
+      </div>
+    </div>
+    <ul class="checks">
+      <li>Read-only probes are safe by default.</li>
+      <li>Live mutations require backup identity and explicit confirmation.</li>
+      <li>Frame/contact-sheet outputs must be file-verified before use.</li>
+    </ul>
+  </section>
+
+  <section class="card grow">
+    <div class="card-head">
+      <div>
+        <h2>Result</h2>
+        <p>Latest UXP or CEP response.</p>
+      </div>
+      <button id="copy-result">Copy</button>
+    </div>
+    <pre id="status" role="status" aria-live="polite" aria-atomic="true" tabindex="0">Starting…</pre>
+  </section>
+
+  <footer>
+    UI scaffold adapted from MIT-licensed Premiere Pro MCP panel patterns. See THIRD_PARTY_NOTICES.md.
+  </footer>
+
+  <script src="index.cjs"></script>
+</body>
+</html>

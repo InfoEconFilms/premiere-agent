@@ -988,6 +988,11 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             bridge_dir / "main.js",
             bridge_dir / "lib" / "CSInterface.js",
             bridge_dir / "extendscript_bridge.jsx",
+            PROJECT_ROOT / "premiere_uxp" / "manifest.json",
+            PROJECT_ROOT / "premiere_uxp" / "index.html",
+            PROJECT_ROOT / "premiere_uxp" / "index.cjs",
+            PROJECT_ROOT / "premiere_uxp" / "styles.css",
+            PROJECT_ROOT / "premiere_uxp" / "THIRD_PARTY_NOTICES.md",
             PROJECT_ROOT / "scripts" / "install_premiere_bridge.py",
         ]
         missing = [str(p) for p in required_files if not p.exists()]
@@ -1042,6 +1047,25 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere CEP explicit JSX loader", "missing explicit $.evalFile loader")
         else:
             R.ok("Premiere CEP explicit JSX loader")
+        uxp_dir = PROJECT_ROOT / "premiere_uxp"
+        uxp_manifest = json.loads((uxp_dir / "manifest.json").read_text(encoding="utf-8"))
+        uxp_html = (uxp_dir / "index.html").read_text(encoding="utf-8")
+        uxp_js = (uxp_dir / "index.cjs").read_text(encoding="utf-8")
+        uxp_notice = (uxp_dir / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+        if uxp_manifest.get("id") != "com.econfilms.premiereagent.uxp" or uxp_manifest.get("host", {}).get("app") != "premierepro":
+            R.fail("Premiere UXP manifest contract", str(uxp_manifest)[:500])
+        else:
+            R.ok("Premiere UXP manifest contract")
+        if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "review-frames" not in uxp_html:
+            R.fail("Premiere UXP frontend contract", "missing core UI controls")
+        elif "require(\"premierepro\")" not in uxp_js or "fetch(bridgeUrl()" not in uxp_js or "export_sequence_review_frames" not in uxp_js:
+            R.fail("Premiere UXP frontend contract", "missing UXP API or CEP bridge calls")
+        elif "MIT" not in uxp_notice or "premiere-pro-mcp" not in uxp_notice:
+            R.fail("Premiere UXP attribution", "missing MIT third-party notice")
+        else:
+            R.ok("Premiere UXP frontend contract")
+        node_check_uxp = subprocess.run(["node", "--check", "premiere_uxp/index.cjs"], cwd=str(PROJECT_ROOT), check=True, capture_output=True, text=True)
+        R.ok("Premiere UXP syntax")
         node_check = """
 const t = require('./premiere_bridge/rpc_transport.js');
 (async () => {

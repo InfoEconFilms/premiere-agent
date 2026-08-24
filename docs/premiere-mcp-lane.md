@@ -91,6 +91,14 @@ python scripts/install_premiere_bridge.py
 
 That installs a symlink into the Adobe CEP extensions folder and enables unsigned CEP debug mode on macOS. Restart Premiere, then open `Window → Extensions → Premiere Agent Bridge`.
 
+A UXP frontend scaffold now lives in:
+
+```text
+premiere_uxp/
+```
+
+Side-load it during development with Adobe UXP Developer Tool, then open `Window → UXP Plugins → Premiere Agent`. The UXP panel is the preferred user-facing frontend for documented Premiere APIs and status UX. It currently uses a hybrid architecture: UXP reads active project/sequence state directly through Premiere's documented UXP API, while the proven CEP localhost JSON-RPC bridge remains the compatibility transport/fallback for ExtendScript/QE methods and the already-verified live tools. The UXP scaffold adapts MIT-licensed UI patterns from `leancoderkavy/premiere-pro-mcp`; attribution is recorded in `premiere_uxp/THIRD_PARTY_NOTICES.md`.
+
 The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end without Premiere. The CEP panel now exposes the same endpoint from inside Premiere when opened. It loads `extendscript_bridge.jsx`, which implements real read probes (`status`, sanitized `verify_premiere_connection`, active project/sequence, sequence snapshots, richer `get_sequence_structure`, `list_markers`) and guarded write attempts for backup, markers, editorial-marker batches, caption import, review-frame export, media import, and export handoff where Premiere exposes the needed APIs.
 
 The bridge should accept JSON-RPC 2.0 POST requests:
