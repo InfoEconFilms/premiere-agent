@@ -40,7 +40,7 @@ It exposes safe tools plus dry-run live-bridge planning tools:
 | `premiere_agent_duplicate_sequence` | write, dry-run default | Duplicate/backup a sequence; requires `confirm=true` for live execution. |
 | `premiere_agent_add_marker` | write, dry-run default | Add a sequence marker; requires `confirm=true` and `backup_sequence_id`. |
 | `premiere_agent_add_editorial_markers` | write, dry-run default | Batch-add AI editorial markers for filler, retakes, in-clip editor notes, or review regions; requires `confirm=true` and `backup_sequence_id`. |
-| `premiere_agent_export_review_frames` | render/file write, dry-run default | Export evenly spaced PNG review frames from a live sequence; contact-sheet creation is a local follow-up from returned paths. |
+| `premiere_agent_export_review_frames` | render/file write, dry-run default | Export evenly spaced review frames from a live sequence. CEP first tries stills; on Premiere builds with no still preset it may return short H.264 proof clips, which the local side can frame-extract into a contact sheet. |
 | `premiere_agent_import_captions` | write, dry-run default | Import an `.srt`/`.vtt` caption file and scaffold caption-track creation where Premiere exposes it. |
 | `premiere_agent_queue_export` | render/write, dry-run default | Queue a sequence/range export; requires `confirm=true` and `backup_sequence_id`. |
 

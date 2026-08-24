@@ -1015,8 +1015,8 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere ExtendScript duration fallback", "negative sequence duration must fall back to max clip end")
         else:
             R.ok("Premiere ExtendScript duration fallback")
-        if "paFindStillPreset" not in jsx or "paFindFallbackStillPreset" not in jsx or "MediaIO/systempresets" not in jsx or "exportAsMediaDirect" not in jsx or "paFirstWrittenFile" not in jsx:
-            R.fail("Premiere review-frame fallback", "review frames must fall back from QE to AME still/H.264 exports and verify file writes")
+        if "paFindStillPreset" not in jsx or "paFindFallbackStillPreset" not in jsx or "MediaIO/systempresets" not in jsx or "ame_h264_short_proof_export" not in jsx or "exportTicks = proofIsVideo" not in jsx or "paFirstWrittenFile" not in jsx:
+            R.fail("Premiere review-frame fallback", "review frames must fall back from QE to AME still/H.264 proof exports and verify file writes")
         else:
             R.ok("Premiere review-frame fallback")
         if "function paHasApp()" not in jsx or "return !!(typeof app !== 'undefined' && app && app.project);" not in jsx:

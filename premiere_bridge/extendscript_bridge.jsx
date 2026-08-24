@@ -697,6 +697,7 @@ function paExportOneReviewFrame(seq, outputPath, timeS) {
     var preset = paFindStillPreset(outputPath);
     var exportPath = outputPath;
     var stillFallback = null;
+    var proofIsVideo = false;
     if (!preset) {
       stillFallback = paFindFallbackStillPreset();
       if (stillFallback) {
@@ -706,9 +707,10 @@ function paExportOneReviewFrame(seq, outputPath, timeS) {
       }
     }
     if (!preset) {
-      notes.push('AME: no still-image preset found; trying H.264 one-frame proof clip');
+      notes.push('AME: no still-image preset found; trying H.264 short proof clip');
       preset = paFindH264Preset();
       exportPath = paWithExtension(outputPath, '.mp4');
+      proofIsVideo = true;
     }
     if (!preset) {
       notes.push('AME: no still or H.264 preset found');
@@ -723,12 +725,14 @@ function paExportOneReviewFrame(seq, outputPath, timeS) {
         var frameTicks = Number(seq.timebase || 0);
         var startTicks = Number(atTicks);
         if (!isFinite(frameTicks) || frameTicks <= 0) frameTicks = 10160640000;
+        var exportTicks = proofIsVideo ? Math.max(frameTicks * 6, 63504000000) : frameTicks;
         var staleExport = new File(exportPath);
         try { if (staleExport.exists) staleExport.remove(); } catch (staleExportErr) {}
         seq.setInPoint(paTicksToSeconds(startTicks));
-        seq.setOutPoint(paTicksToSeconds(startTicks + frameTicks));
+        seq.setOutPoint(paTicksToSeconds(startTicks + exportTicks));
         seq.exportAsMediaDirect(exportPath, preset, app.encoder.ENCODE_IN_TO_OUT);
         notes.push('AME preset: ' + preset);
+        if (proofIsVideo) notes.push('AME proof clip duration_s: ' + paTicksToSeconds(exportTicks));
       } finally {
         try { if (savedIn !== null) seq.setInPoint(paTicksToSeconds(savedIn)); } catch (restoreInErr) {}
         try { if (savedOut !== null) seq.setOutPoint(paTicksToSeconds(savedOut)); } catch (restoreOutErr) {}
@@ -736,7 +740,7 @@ function paExportOneReviewFrame(seq, outputPath, timeS) {
       var ameWritten = paFirstWrittenFile(exportPath);
       if (ameWritten) {
         try { if (savedPos && seq.setPlayerPosition) seq.setPlayerPosition(savedPos); } catch (restoreAmeErr) {}
-        return { ok: true, path: ameWritten, requested_path: outputPath, time_s: timeS, method: stillFallback ? 'ame_fallback_still_export' : (/\.mp4$/i.test(exportPath) ? 'ame_h264_one_frame_export' : 'ame_still_export'), notes: notes };
+        return { ok: true, path: ameWritten, requested_path: outputPath, time_s: timeS, method: stillFallback ? 'ame_fallback_still_export' : (/\.mp4$/i.test(exportPath) ? 'ame_h264_short_proof_export' : 'ame_still_export'), notes: notes };
       }
     }
   } catch (ameErr) { notes.push('AME: ' + String(ameErr)); }
