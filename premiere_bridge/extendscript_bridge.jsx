@@ -555,7 +555,10 @@ function paCollectAllPresets() {
   var ame = paAdobeAppFolders('Adobe Media Encoder');
   for (var i = 0; i < ame.length; i += 1) roots.push(paAdobeResourceFolder(ame[i], 'MediaIO/systempresets'));
   var ppro = paAdobeAppFolders('Adobe Premiere Pro');
-  for (var j = 0; j < ppro.length; j += 1) roots.push(paAdobeResourceFolder(ppro[j], 'Settings/IngestPresets'));
+  for (var j = 0; j < ppro.length; j += 1) {
+    roots.push(paAdobeResourceFolder(ppro[j], 'Settings/IngestPresets'));
+    roots.push(paAdobeResourceFolder(ppro[j], 'MediaIO/systempresets'));
+  }
   var userRoot = new Folder(Folder.myDocuments.fsName + '/Adobe/Adobe Media Encoder');
   if (userRoot.exists) {
     var versions = userRoot.getFiles(function(f) { return f instanceof Folder; });
@@ -582,6 +585,45 @@ function paFindStillPreset(outputPath) {
     }
   }
   return '';
+}
+
+function paFindFallbackStillPreset() {
+  var fallbacks = [
+    { needles: ['tiff', 'tif'], ext: '.tif' },
+    { needles: ['bmp'], ext: '.bmp' },
+    { needles: ['gif'], ext: '.gif' }
+  ];
+  var presets = paCollectAllPresets();
+  for (var f = 0; f < fallbacks.length; f += 1) {
+    for (var n = 0; n < fallbacks[f].needles.length; n += 1) {
+      for (var i = 0; i < presets.length; i += 1) {
+        var haystack = (presets[i].name + ' ' + presets[i].format).toLowerCase();
+        if (haystack.indexOf(fallbacks[f].needles[n]) !== -1) return { path: presets[i].path, ext: fallbacks[f].ext, name: presets[i].name };
+      }
+    }
+  }
+  return null;
+}
+
+function paWithExtension(path, ext) {
+  var s = String(path || '');
+  var slash = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\\\'));
+  var dot = s.lastIndexOf('.');
+  if (dot > slash) return s.substring(0, dot) + ext;
+  return s + ext;
+}
+
+function paFindH264Preset() {
+  var presets = paCollectAllPresets();
+  var first = '';
+  for (var i = 0; i < presets.length; i += 1) {
+    var haystack = (presets[i].name + ' ' + presets[i].format).toLowerCase();
+    if (haystack.indexOf('h264') !== -1 || haystack.indexOf('h.264') !== -1 || haystack.indexOf('48323634') !== -1) {
+      if (!first) first = presets[i].path;
+      if (haystack.indexOf('match source') !== -1) return presets[i].path;
+    }
+  }
+  return first;
 }
 
 function paFirstWrittenFile(outputPath) {
@@ -653,8 +695,23 @@ function paExportOneReviewFrame(seq, outputPath, timeS) {
   notes.push('QE wrote no file; trying one-frame Media Encoder export');
   try {
     var preset = paFindStillPreset(outputPath);
+    var exportPath = outputPath;
+    var stillFallback = null;
     if (!preset) {
-      notes.push('AME: no ' + (wantJpeg ? 'JPEG' : 'PNG') + ' still preset found');
+      stillFallback = paFindFallbackStillPreset();
+      if (stillFallback) {
+        preset = stillFallback.path;
+        exportPath = paWithExtension(outputPath, stillFallback.ext);
+        notes.push('AME: no ' + (wantJpeg ? 'JPEG' : 'PNG') + ' still preset found; using ' + stillFallback.name + ' at ' + exportPath);
+      }
+    }
+    if (!preset) {
+      notes.push('AME: no still-image preset found; trying H.264 one-frame proof clip');
+      preset = paFindH264Preset();
+      exportPath = paWithExtension(outputPath, '.mp4');
+    }
+    if (!preset) {
+      notes.push('AME: no still or H.264 preset found');
     } else if (!seq.exportAsMediaDirect) {
       notes.push('AME: sequence.exportAsMediaDirect unavailable');
     } else {
@@ -666,13 +723,20 @@ function paExportOneReviewFrame(seq, outputPath, timeS) {
         var frameTicks = Number(seq.timebase || 0);
         var startTicks = Number(atTicks);
         if (!isFinite(frameTicks) || frameTicks <= 0) frameTicks = 10160640000;
+        var staleExport = new File(exportPath);
+        try { if (staleExport.exists) staleExport.remove(); } catch (staleExportErr) {}
         seq.setInPoint(paTicksToSeconds(startTicks));
         seq.setOutPoint(paTicksToSeconds(startTicks + frameTicks));
-        seq.exportAsMediaDirect(outputPath, preset, app.encoder.ENCODE_IN_TO_OUT);
+        seq.exportAsMediaDirect(exportPath, preset, app.encoder.ENCODE_IN_TO_OUT);
         notes.push('AME preset: ' + preset);
       } finally {
         try { if (savedIn !== null) seq.setInPoint(paTicksToSeconds(savedIn)); } catch (restoreInErr) {}
         try { if (savedOut !== null) seq.setOutPoint(paTicksToSeconds(savedOut)); } catch (restoreOutErr) {}
+      }
+      var ameWritten = paFirstWrittenFile(exportPath);
+      if (ameWritten) {
+        try { if (savedPos && seq.setPlayerPosition) seq.setPlayerPosition(savedPos); } catch (restoreAmeErr) {}
+        return { ok: true, path: ameWritten, requested_path: outputPath, time_s: timeS, method: stillFallback ? 'ame_fallback_still_export' : (/\.mp4$/i.test(exportPath) ? 'ame_h264_one_frame_export' : 'ame_still_export'), notes: notes };
       }
     }
   } catch (ameErr) { notes.push('AME: ' + String(ameErr)); }
