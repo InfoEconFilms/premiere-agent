@@ -182,7 +182,7 @@ function paStatus(raw) {
 }
 
 function paVerifyPremiereConnection(raw) {
-  var projectOpen = paHasApp();
+  var projectOpen = !!paHasApp();
   var seq = projectOpen ? paActiveSequence() : null;
   var sequenceOpen = !!seq;
   var snapshotReadable = false;
