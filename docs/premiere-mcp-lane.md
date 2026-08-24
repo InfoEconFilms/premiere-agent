@@ -35,9 +35,13 @@ It exposes safe tools plus dry-run live-bridge planning tools:
 | `premiere_agent_live_bridge_status` | read-only/dry-run | Check bridge connectivity or produce the request shape when no bridge is configured. |
 | `premiere_agent_verify_premiere_connection` | read-only/dry-run | First-run safety probe: bridge reachable, project open, active sequence readable, no names/paths/media details returned. |
 | `premiere_agent_get_sequence_structure` | read-only/dry-run | Read tracks, clips, gaps, playhead, and host-snapshot verification for the active/target sequence. |
+| `premiere_agent_list_markers` | read-only/dry-run | Read back sequence markers by time/name/comment for verification after marker writes. |
 | `premiere_agent_plan_live_job` | read-only | Build an orchestrator plan for talking-head, batch-export, motion-graphic, or caption jobs. |
 | `premiere_agent_duplicate_sequence` | write, dry-run default | Duplicate/backup a sequence; requires `confirm=true` for live execution. |
 | `premiere_agent_add_marker` | write, dry-run default | Add a sequence marker; requires `confirm=true` and `backup_sequence_id`. |
+| `premiere_agent_add_editorial_markers` | write, dry-run default | Batch-add AI editorial markers for filler, retakes, in-clip editor notes, or review regions; requires `confirm=true` and `backup_sequence_id`. |
+| `premiere_agent_export_review_frames` | render/file write, dry-run default | Export evenly spaced PNG review frames from a live sequence; contact-sheet creation is a local follow-up from returned paths. |
+| `premiere_agent_import_captions` | write, dry-run default | Import an `.srt`/`.vtt` caption file and scaffold caption-track creation where Premiere exposes it. |
 | `premiere_agent_queue_export` | render/write, dry-run default | Queue a sequence/range export; requires `confirm=true` and `backup_sequence_id`. |
 
 ## Hermes registration
@@ -87,7 +91,7 @@ python scripts/install_premiere_bridge.py
 
 That installs a symlink into the Adobe CEP extensions folder and enables unsigned CEP debug mode on macOS. Restart Premiere, then open `Window → Extensions → Premiere Agent Bridge`.
 
-The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end without Premiere. The CEP panel now exposes the same endpoint from inside Premiere when opened. It loads `extendscript_bridge.jsx`, which implements real read probes (`status`, sanitized `verify_premiere_connection`, active project/sequence, sequence snapshots, richer `get_sequence_structure`) and guarded write attempts for backup, markers, media import, and export handoff where Premiere exposes the needed APIs.
+The mock server implements every initial JSON-RPC method against an in-memory mock Premiere project, so the MCP live tools can be tested end-to-end without Premiere. The CEP panel now exposes the same endpoint from inside Premiere when opened. It loads `extendscript_bridge.jsx`, which implements real read probes (`status`, sanitized `verify_premiere_connection`, active project/sequence, sequence snapshots, richer `get_sequence_structure`, `list_markers`) and guarded write attempts for backup, markers, editorial-marker batches, caption import, review-frame export, media import, and export handoff where Premiere exposes the needed APIs.
 
 The bridge should accept JSON-RPC 2.0 POST requests:
 
@@ -115,12 +119,16 @@ Required read methods:
 - `get_active_sequence`
 - `snapshot_sequence`
 - `get_sequence_structure`
+- `list_markers`
 
 Initial write methods:
 
 - `duplicate_sequence`
 - `add_marker`
+- `add_editorial_markers`
 - `import_media`
+- `import_captions`
+- `export_sequence_review_frames`
 - `queue_export`
 - `apply_basic_lumetri`
 - `set_clip_transform`

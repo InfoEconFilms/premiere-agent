@@ -867,7 +867,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
 
         spec = pam.handle("tools/call", {"name": "premiere_agent_live_bridge_protocol_spec", "arguments": {}})
         spec_text = spec["content"][0]["text"]
-        if "duplicate_sequence" not in spec_text or "JSON-RPC" not in spec_text or "verify_premiere_connection" not in spec_text or "get_sequence_structure" not in spec_text:
+        if "duplicate_sequence" not in spec_text or "JSON-RPC" not in spec_text or "list_markers" not in spec_text or "export_sequence_review_frames" not in spec_text or "import_captions" not in spec_text:
             R.fail("MCP live bridge protocol spec", spec_text)
         else:
             R.ok("MCP live bridge protocol spec")
@@ -883,6 +883,30 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("MCP get sequence structure dry-run", structure["content"][0]["text"])
         else:
             R.ok("MCP get sequence structure dry-run")
+
+        marker_list = pam.handle("tools/call", {"name": "premiere_agent_list_markers", "arguments": {"sequence_id": "seq1"}})
+        if "list_markers" not in marker_list["content"][0]["text"] or "dry_run" not in marker_list["content"][0]["text"]:
+            R.fail("MCP list markers dry-run", marker_list["content"][0]["text"])
+        else:
+            R.ok("MCP list markers dry-run")
+
+        review_dry = pam.handle("tools/call", {"name": "premiere_agent_export_review_frames", "arguments": {"sequence_id": "seq1", "output_dir": str(tmp / "frames"), "backup_sequence_id": "backup1", "confirm": True}})
+        if "export_sequence_review_frames" not in review_dry["content"][0]["text"] or "dry_run" not in review_dry["content"][0]["text"]:
+            R.fail("MCP export review frames dry-run", review_dry["content"][0]["text"])
+        else:
+            R.ok("MCP export review frames dry-run")
+
+        captions_dry = pam.handle("tools/call", {"name": "premiere_agent_import_captions", "arguments": {"sequence_id": "seq1", "caption_path": str(tmp / "master.srt"), "backup_sequence_id": "backup1", "confirm": True}})
+        if "import_captions" not in captions_dry["content"][0]["text"] or "dry_run" not in captions_dry["content"][0]["text"]:
+            R.fail("MCP import captions dry-run", captions_dry["content"][0]["text"])
+        else:
+            R.ok("MCP import captions dry-run")
+
+        editorial_dry = pam.handle("tools/call", {"name": "premiere_agent_add_editorial_markers", "arguments": {"sequence_id": "seq1", "notes": [{"time_s": 2, "kind": "retake", "label": "AI RETAKE"}], "backup_sequence_id": "backup1", "confirm": True}})
+        if "add_editorial_markers" not in editorial_dry["content"][0]["text"] or "dry_run" not in editorial_dry["content"][0]["text"]:
+            R.fail("MCP add editorial markers dry-run", editorial_dry["content"][0]["text"])
+        else:
+            R.ok("MCP add editorial markers dry-run")
 
         plan_call = pam.handle("tools/call", {"name": "premiere_agent_plan_live_job", "arguments": {"job_type": "batch_export", "sequence_id": "seq1"}})
         plan_text = plan_call["content"][0]["text"]
@@ -928,6 +952,29 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge marker mutation", str(marker))
         else:
             R.ok("Premiere bridge marker mutation")
+        listed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 31, "method": "list_markers", "params": {"sequence_id": "seq_main"}})
+        if not listed or listed.get("result", {}).get("marker_count") != 1 or listed.get("result", {}).get("verification", {}).get("mutates_project") is not False:
+            R.fail("Premiere bridge marker listing", str(listed))
+        else:
+            R.ok("Premiere bridge marker listing")
+        editorial = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 32, "method": "add_editorial_markers", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "notes": [{"time_s": 1.5, "kind": "filler", "label": "AI FILLER"}]}})
+        if not editorial or editorial.get("result", {}).get("added_count") != 1:
+            R.fail("Premiere bridge editorial markers", str(editorial))
+        else:
+            R.ok("Premiere bridge editorial markers")
+        review = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 33, "method": "export_sequence_review_frames", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "output_dir": str(tmp / "review_frames"), "frame_count": 3, "range_end_s": 3}})
+        review_result = (review or {}).get("result") or {}
+        if not review_result.get("ok") or review_result.get("exported_count") != 3 or not Path(review_result.get("frames", [{}])[0].get("path", "")).exists():
+            R.fail("Premiere bridge review frames", str(review))
+        else:
+            R.ok("Premiere bridge review frames")
+        srt = tmp / "captions.srt"
+        srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nHello\n", encoding="utf-8")
+        captions = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 34, "method": "import_captions", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "caption_path": str(srt)}})
+        if not captions or not captions.get("result", {}).get("ok"):
+            R.fail("Premiere bridge caption import scaffold", str(captions))
+        else:
+            R.ok("Premiere bridge caption import scaffold")
         denied_bridge = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 4, "method": "queue_export", "params": {"sequence_id": "seq_main", "output_path": str(tmp / "x.mp4")}})
         if not denied_bridge or "error" not in denied_bridge:
             R.fail("Premiere bridge backup enforcement", str(denied_bridge))
@@ -954,7 +1001,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere CEP manifest contract", manifest[:500])
         else:
             R.ok("Premiere CEP manifest contract")
-        for fn in ("paStatus", "paVerifyPremiereConnection", "paGetActiveSequence", "paSnapshotSequence", "paGetSequenceStructure", "paDuplicateSequence", "paAddMarker", "paImportMedia", "paQueueExport"):
+        for fn in ("paStatus", "paVerifyPremiereConnection", "paGetActiveSequence", "paSnapshotSequence", "paGetSequenceStructure", "paListMarkers", "paDuplicateSequence", "paAddMarker", "paAddEditorialMarkers", "paExportSequenceReviewFrames", "paImportCaptions", "paImportMedia", "paQueueExport"):
             if ("function " + fn) not in jsx:
                 R.fail("Premiere ExtendScript function contract", fn)
                 break
@@ -979,7 +1026,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         js = (bridge_dir / "main.js").read_text(encoding="utf-8")
         transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
         shim = (bridge_dir / "lib" / "CSInterface.js").read_text(encoding="utf-8")
-        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport or "verify_premiere_connection" not in transport or "get_sequence_structure" not in transport:
+        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport or "list_markers" not in transport or "export_sequence_review_frames" not in transport or "import_captions" not in transport or "add_editorial_markers" not in transport:
             R.fail("Premiere CEP HTTP transport contract", "missing transport wiring")
         else:
             R.ok("Premiere CEP HTTP transport contract")

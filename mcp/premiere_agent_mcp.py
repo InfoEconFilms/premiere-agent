@@ -222,6 +222,15 @@ def live_bridge_get_sequence_structure(
     return PremiereLiveBridge(bridge_url).get_sequence_structure(sequence_id, dry_run=dry_run)
 
 
+def live_bridge_list_markers(
+    sequence_id: str | None = None,
+    *,
+    bridge_url: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).list_markers(sequence_id, dry_run=dry_run)
+
+
 def live_bridge_plan(job_type: str, sequence_id: str, requested_outputs: list[str] | None = None) -> dict[str, Any]:
     return plan_live_premiere_job(job_type, sequence_id, requested_outputs=requested_outputs)  # type: ignore[arg-type]
 
@@ -260,6 +269,72 @@ def live_bridge_add_marker(
         label,
         color=color,
         comment=comment,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_add_editorial_markers(
+    sequence_id: str,
+    notes: list[dict[str, Any]],
+    *,
+    default_color: str = "red",
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).add_editorial_markers(
+        sequence_id,
+        notes,
+        default_color=default_color,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_export_review_frames(
+    sequence_id: str,
+    output_dir: str,
+    *,
+    frame_count: int = 6,
+    range_start_s: float | None = None,
+    range_end_s: float | None = None,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).export_sequence_review_frames(
+        sequence_id,
+        output_dir,
+        frame_count=frame_count,
+        range_start_s=range_start_s,
+        range_end_s=range_end_s,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_import_captions(
+    sequence_id: str,
+    caption_path: str,
+    *,
+    start_s: float = 0.0,
+    caption_format: str = "subtitle",
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).import_captions(
+        sequence_id,
+        caption_path,
+        start_s=start_s,
+        caption_format=caption_format,
         backup_sequence_id=backup_sequence_id,
         confirm=confirm,
         dry_run=dry_run,
@@ -336,6 +411,11 @@ TOOLS: dict[str, dict[str, Any]] = {
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
         "handler": lambda a: live_bridge_get_sequence_structure(a.get("sequence_id"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
     },
+    "premiere_agent_list_markers": {
+        "description": "List markers on a live Premiere sequence for readback verification after marker/editorial-note writes.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_list_markers(a.get("sequence_id"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
     "premiere_agent_plan_live_job": {
         "description": "Plan a safety-gated live Premiere job before mutating a sequence.",
         "inputSchema": {"type": "object", "properties": {"job_type": {"type": "string", "enum": ["talking_head", "batch_export", "motion_graphic", "caption_pass"]}, "sequence_id": {"type": "string"}, "requested_outputs": {"type": "array", "items": {"type": "string"}}}, "required": ["job_type", "sequence_id"]},
@@ -350,6 +430,21 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Add a marker to a live Premiere sequence. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "time_s": {"type": "number"}, "label": {"type": "string"}, "color": {"type": "string", "default": "red"}, "comment": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "time_s", "label"]},
         "handler": lambda a: live_bridge_add_marker(a["sequence_id"], a["time_s"], a["label"], color=a.get("color", "red"), comment=a.get("comment", ""), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_add_editorial_markers": {
+        "description": "Add a batch of AI editorial-note markers for filler, retakes, editor notes, or review regions. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "notes": {"type": "array", "items": {"type": "object"}}, "default_color": {"type": "string", "default": "red"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "notes"]},
+        "handler": lambda a: live_bridge_add_editorial_markers(a["sequence_id"], a["notes"], default_color=a.get("default_color", "red"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_export_review_frames": {
+        "description": "Export evenly spaced review frames from a live Premiere sequence into a folder. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "output_dir": {"type": "string"}, "frame_count": {"type": "integer", "default": 6}, "range_start_s": {"type": "number"}, "range_end_s": {"type": "number"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "output_dir"]},
+        "handler": lambda a: live_bridge_export_review_frames(a["sequence_id"], a["output_dir"], frame_count=a.get("frame_count", 6), range_start_s=a.get("range_start_s"), range_end_s=a.get("range_end_s"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_import_captions": {
+        "description": "Import an SRT/VTT caption file into a live Premiere project/sequence scaffold. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "caption_path": {"type": "string"}, "start_s": {"type": "number", "default": 0}, "caption_format": {"type": "string", "default": "subtitle"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "caption_path"]},
+        "handler": lambda a: live_bridge_import_captions(a["sequence_id"], a["caption_path"], start_s=a.get("start_s", 0.0), caption_format=a.get("caption_format", "subtitle"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_queue_export": {
         "description": "Queue a live Premiere sequence/range export. Requires confirm=true and backup_sequence_id.",

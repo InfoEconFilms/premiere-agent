@@ -160,6 +160,100 @@ class MockPremiereBackend:
         seq["markers"].append(marker)
         return {"ok": True, "marker": marker, "sequence_id": seq["id"]}
 
+    def list_markers(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
+        markers = list(seq.get("markers", []))
+        return {
+            "ok": True,
+            "sequence": self._public_sequence(seq),
+            "marker_count": len(markers),
+            "markers": markers,
+            "verification": {"kind": "mock_marker_list", "mutates_project": False},
+        }
+
+    def add_editorial_markers(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
+        _require_backup(params)
+        notes = params.get("notes") or []
+        if not isinstance(notes, list) or not notes:
+            raise JsonRpcError(-32602, "notes must be a non-empty array")
+        added: list[dict[str, Any]] = []
+        failures: list[dict[str, Any]] = []
+        for i, note in enumerate(notes):
+            try:
+                item = note if isinstance(note, dict) else {}
+                raw_time = item.get("time_s", item.get("start_s"))
+                if raw_time is None:
+                    raise ValueError("time_s or start_s required")
+                marker = {
+                    "id": f"marker_{len(seq['markers'])+1:04d}",
+                    "time_s": float(raw_time),
+                    "label": str(item.get("label") or f"AI {item.get('kind', 'editorial_note')}"),
+                    "color": str(item.get("color") or params.get("default_color") or "red"),
+                    "comment": str(item.get("comment") or item.get("reason") or ""),
+                    "kind": str(item.get("kind") or "editorial_note"),
+                    "backup_sequence_id": params.get("backup_sequence_id"),
+                }
+                seq["markers"].append(marker)
+                added.append(marker)
+            except Exception as e:
+                failures.append({"index": i, "error": f"{type(e).__name__}: {e}"})
+        return {
+            "ok": bool(added),
+            "sequence_id": seq["id"],
+            "added_count": len(added),
+            "failed_count": len(failures),
+            "markers": added,
+            "failures": failures,
+            "verification": {"kind": "mock_editorial_marker_pass", "mutates_project": True, "backup_sequence_id": params.get("backup_sequence_id")},
+        }
+
+    def export_sequence_review_frames(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
+        _require_backup(params)
+        outdir = Path(str(params["output_dir"])).expanduser().resolve()
+        outdir.mkdir(parents=True, exist_ok=True)
+        count = max(2, min(24, int(params.get("frame_count") or 6)))
+        start = float(params.get("range_start_s") or 0.0)
+        end = float(params.get("range_end_s") or seq.get("duration_s") or 1.0)
+        if end <= start:
+            raise JsonRpcError(-32602, "range_end_s must be greater than range_start_s")
+        frames = []
+        png = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f8ffff3f0005fe02fea73581e80000000049454e44ae426082")
+        for i in range(count):
+            at = start + ((end - start) * i / (count - 1))
+            path = outdir / f"review_{i+1:03d}.png"
+            path.write_bytes(png)
+            frames.append({"index": i, "time_s": round(at, 3), "path": str(path), "method": "mock_png"})
+        manifest = {"sequence_id": seq["id"], "frames": frames, "range": {"start_s": start, "end_s": end}}
+        (outdir / "review_frames_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        return {
+            "ok": True,
+            "sequence": self._public_sequence(seq),
+            "output_dir": str(outdir),
+            "requested_count": count,
+            "exported_count": len(frames),
+            "frames": frames,
+            "manifest_path": str(outdir / "review_frames_manifest.json"),
+            "contact_sheet_pending": True,
+            "verification": {"kind": "mock_review_frames", "backup_sequence_id": params.get("backup_sequence_id")},
+        }
+
+    def import_captions(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
+        _require_backup(params)
+        caption_path = str(Path(str(params["caption_path"])).expanduser().resolve())
+        item = {
+            "id": f"caption_{len(seq.get('captions', []))+1:04d}",
+            "caption_path": caption_path,
+            "start_s": float(params.get("start_s") or 0.0),
+            "caption_format": params.get("caption_format") or "subtitle",
+            "backup_sequence_id": params.get("backup_sequence_id"),
+            "caption_track_created": True,
+        }
+        seq.setdefault("captions", []).append(item)
+        return {"ok": True, "sequence_id": seq["id"], "caption": item, "verification": {"kind": "mock_caption_import", "mutates_project": True}}
+
     def import_media(self, params: dict[str, Any]) -> dict[str, Any]:
         seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
         _require_backup(params)

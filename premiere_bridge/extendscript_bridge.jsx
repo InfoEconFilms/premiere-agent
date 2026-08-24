@@ -423,6 +423,204 @@ function paAddMarker(raw) {
   }
 }
 
+function paMarkerTimeSeconds(marker, propName) {
+  try {
+    var t = marker[propName || 'start'];
+    if (t && t.seconds !== undefined) return Number(t.seconds);
+    if (typeof t === 'number') return Number(t);
+  } catch (err) {}
+  return null;
+}
+
+function paMarkerSummary(marker, index) {
+  var colorIndex = null;
+  try { if (marker.getColorByIndex) colorIndex = Number(marker.getColorByIndex()); } catch (colorErr) {}
+  return {
+    index: index,
+    id: String(marker.guid || marker.name || ('marker_' + String(index + 1))),
+    time_s: paMarkerTimeSeconds(marker, 'start'),
+    end_s: paMarkerTimeSeconds(marker, 'end'),
+    label: String(marker.name || ''),
+    comment: String(marker.comments || ''),
+    color_index: colorIndex
+  };
+}
+
+function paListMarkers(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq || !seq.markers) return paJson({ ok: false, error: 'Sequence marker API unavailable' });
+  var markers = [];
+  try {
+    var marker = seq.markers.getFirstMarker ? seq.markers.getFirstMarker() : null;
+    while (marker) {
+      markers.push(paMarkerSummary(marker, markers.length));
+      marker = seq.markers.getNextMarker ? seq.markers.getNextMarker(marker) : null;
+    }
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({
+    ok: true,
+    sequence: paSequenceSummary(seq),
+    marker_count: markers.length,
+    markers: markers,
+    verification: { kind: 'premiere_marker_list', mutates_project: false }
+  });
+}
+
+function paAddEditorialMarkers(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq || !seq.markers || !seq.markers.createMarker) return paJson({ ok: false, error: 'Sequence marker API unavailable' });
+  var notes = args.notes || [];
+  if (!(notes instanceof Array) || notes.length < 1) return paJson({ ok: false, error: 'notes must be a non-empty array' });
+  var added = [];
+  var failures = [];
+  for (var i = 0; i < notes.length; i += 1) {
+    try {
+      var note = notes[i] || {};
+      var timeS = Number(note.time_s !== undefined ? note.time_s : note.start_s);
+      if (!isFinite(timeS) || timeS < 0) throw new Error('note time_s/start_s must be non-negative');
+      var kind = String(note.kind || 'editorial_note');
+      var label = String(note.label || ('AI ' + kind));
+      var comment = String(note.comment || note.reason || '');
+      var marker = seq.markers.createMarker(timeS);
+      marker.name = label;
+      marker.comments = comment;
+      try { if (marker.setColorByIndex) marker.setColorByIndex(Number(note.color_index || 1)); } catch (colorErr) {}
+      var summary = paMarkerSummary(marker, added.length);
+      summary.kind = kind;
+      summary.backup_sequence_id = args.backup_sequence_id;
+      added.push(summary);
+    } catch (err) {
+      failures.push({ index: i, error: String(err) });
+    }
+  }
+  return paJson({
+    ok: added.length > 0,
+    sequence_id: paSequenceId(seq),
+    added_count: added.length,
+    failed_count: failures.length,
+    markers: added,
+    failures: failures,
+    verification: { kind: 'premiere_editorial_marker_pass', mutates_project: true, backup_sequence_id: args.backup_sequence_id }
+  });
+}
+
+function paSecondsToTicks(seconds) {
+  return String(Math.round(Number(seconds || 0) * 254016000000));
+}
+
+function paEnsureFolder(path) {
+  var folder = new Folder(String(path || ''));
+  if (!folder.exists) folder.create();
+  return folder;
+}
+
+function paExportOneReviewFrame(seq, outputPath, timeS) {
+  var notes = [];
+  var savedPos = null;
+  try { if (seq.getPlayerPosition) savedPos = seq.getPlayerPosition().ticks; } catch (posErr) {}
+  try { if (seq.setPlayerPosition) seq.setPlayerPosition(paSecondsToTicks(timeS)); } catch (setErr) { notes.push('setPlayerPosition: ' + String(setErr)); }
+  var file = new File(outputPath);
+  try { if (file.exists) file.remove(); } catch (removeErr) {}
+  try {
+    app.enableQE();
+    var qeSeq = qe.project.getActiveSequence();
+    if (qeSeq && qeSeq.exportFramePNG) {
+      var w = String(seq.frameSizeHorizontal || 1920);
+      var h = String(seq.frameSizeVertical || 1080);
+      try { notes.push('QE returned ' + qeSeq.exportFramePNG(outputPath, w, h)); }
+      catch (argErr) { notes.push('QE exportFramePNG: ' + String(argErr)); }
+    } else {
+      notes.push('QE exportFramePNG unavailable');
+    }
+  } catch (qeErr) { notes.push('QE: ' + String(qeErr)); }
+  try { if (savedPos && seq.setPlayerPosition) seq.setPlayerPosition(savedPos); } catch (restoreErr) {}
+  return { ok: file.exists, path: outputPath, time_s: timeS, method: file.exists ? 'qe_exportFramePNG' : null, notes: notes };
+}
+
+function paExportSequenceReviewFrames(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found' });
+  var frameCount = Number(args.frame_count || 6);
+  if (!isFinite(frameCount) || frameCount < 2) frameCount = 2;
+  if (frameCount > 24) frameCount = 24;
+  frameCount = Math.floor(frameCount);
+  var duration = paSequenceDurationSeconds(seq);
+  var startS = Number(args.range_start_s || 0);
+  var endS = args.range_end_s !== null && args.range_end_s !== undefined ? Number(args.range_end_s) : duration;
+  if (!isFinite(startS) || startS < 0) startS = 0;
+  if (!isFinite(endS) || endS <= startS) return paJson({ ok: false, error: 'review frame range is empty or invalid' });
+  var folder = paEnsureFolder(args.output_dir);
+  if (!folder.exists) return paJson({ ok: false, error: 'could not create output directory: ' + String(args.output_dir || '') });
+  var frames = [];
+  var failures = [];
+  var span = endS - startS;
+  for (var i = 0; i < frameCount; i += 1) {
+    var atS = startS + (span * i / (frameCount - 1));
+    if (atS >= endS) atS = Math.max(startS, endS - 0.001);
+    var num = String(i + 1);
+    while (num.length < 3) num = '0' + num;
+    var outPath = folder.fsName + '/review_' + num + '.png';
+    var result = paExportOneReviewFrame(seq, outPath, atS);
+    if (result.ok) frames.push(result);
+    else failures.push(result);
+  }
+  return paJson({
+    ok: frames.length > 0,
+    sequence: paSequenceSummary(seq),
+    output_dir: folder.fsName,
+    range: { start_s: startS, end_s: endS },
+    requested_count: frameCount,
+    exported_count: frames.length,
+    frames: frames,
+    failures: failures,
+    contact_sheet_pending: true,
+    verification: { kind: 'premiere_review_frames', scope: 'each returned frame path was verified by CEP File.exists; make contact sheet locally from returned files', backup_sequence_id: args.backup_sequence_id }
+  });
+}
+
+function paImportCaptions(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found' });
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var path = String(args.caption_path || '');
+  if (!path) return paJson({ ok: false, error: 'caption_path required' });
+  var imported = false;
+  var captionTrackCreated = false;
+  var note = '';
+  try { imported = !!app.project.importFiles([path], true, app.project.rootItem, false); }
+  catch (importErr) { return paJson({ ok: false, error: String(importErr) }); }
+  try {
+    if (seq.createCaptionTrack) {
+      note = 'Caption file imported; createCaptionTrack needs the imported ProjectItem and remains version-specific in this scaffold.';
+    } else {
+      note = 'Caption file imported; this Premiere scripting build did not expose createCaptionTrack.';
+    }
+  } catch (captionErr) { note = String(captionErr); }
+  return paJson({
+    ok: imported,
+    sequence_id: paSequenceId(seq),
+    imported: imported,
+    caption_track_created: captionTrackCreated,
+    caption_path: path,
+    start_s: Number(args.start_s || 0),
+    caption_format: String(args.caption_format || 'subtitle'),
+    note: note,
+    verification: { kind: 'premiere_caption_import_scaffold', mutates_project: true, backup_sequence_id: args.backup_sequence_id }
+  });
+}
+
 function paImportMedia(raw) {
   var args = paParse(raw);
   var backupErr = paRequireBackup(args);

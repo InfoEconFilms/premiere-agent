@@ -31,11 +31,15 @@ READ_ACTIONS = {
     "get_active_sequence",
     "snapshot_sequence",
     "get_sequence_structure",
+    "list_markers",
 }
 WRITE_ACTIONS = {
     "duplicate_sequence",
     "add_marker",
+    "add_editorial_markers",
     "import_media",
+    "import_captions",
+    "export_sequence_review_frames",
     "queue_export",
     "apply_basic_lumetri",
     "set_clip_transform",
@@ -140,6 +144,10 @@ class PremiereLiveBridge:
         payload = {"sequence_id": sequence_id} if sequence_id else {}
         return self._request(BridgeRequest("get_sequence_structure", payload, dry_run=dry_run)).to_dict()
 
+    def list_markers(self, sequence_id: str | None = None, *, dry_run: bool = False) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id} if sequence_id else {}
+        return self._request(BridgeRequest("list_markers", payload, dry_run=dry_run)).to_dict()
+
     def duplicate_sequence(self, sequence_id: str, backup_name: str | None = None, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
         _require_confirm("duplicate_sequence", confirm)
         payload = {"sequence_id": sequence_id, "backup_name": backup_name or f"{sequence_id}_AI_BACKUP"}
@@ -168,6 +176,76 @@ class PremiereLiveBridge:
             "comment": comment,
         }
         return self._request(BridgeRequest("add_marker", payload, dry_run=dry_run)).to_dict()
+
+    def add_editorial_markers(
+        self,
+        sequence_id: str,
+        notes: list[dict[str, Any]],
+        *,
+        default_color: str = "red",
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        _require_confirm("add_editorial_markers", confirm)
+        _require_backup("add_editorial_markers", backup_sequence_id)
+        if not isinstance(notes, list) or not notes:
+            raise BridgeError("add_editorial_markers requires a non-empty notes list")
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "default_color": default_color,
+            "notes": notes,
+        }
+        return self._request(BridgeRequest("add_editorial_markers", payload, dry_run=dry_run)).to_dict()
+
+    def export_sequence_review_frames(
+        self,
+        sequence_id: str,
+        output_dir: str,
+        *,
+        frame_count: int = 6,
+        range_start_s: float | None = None,
+        range_end_s: float | None = None,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        _require_confirm("export_sequence_review_frames", confirm)
+        _require_backup("export_sequence_review_frames", backup_sequence_id)
+        out = Path(output_dir).expanduser().resolve()
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "output_dir": str(out),
+            "frame_count": int(frame_count),
+            "range_start_s": range_start_s,
+            "range_end_s": range_end_s,
+        }
+        return self._request(BridgeRequest("export_sequence_review_frames", payload, dry_run=dry_run)).to_dict()
+
+    def import_captions(
+        self,
+        sequence_id: str,
+        caption_path: str,
+        *,
+        start_s: float = 0.0,
+        caption_format: str = "subtitle",
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        _require_confirm("import_captions", confirm)
+        _require_backup("import_captions", backup_sequence_id)
+        captions = Path(caption_path).expanduser().resolve()
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "caption_path": str(captions),
+            "start_s": float(start_s),
+            "caption_format": caption_format,
+        }
+        return self._request(BridgeRequest("import_captions", payload, dry_run=dry_run)).to_dict()
 
     def import_media(
         self,
