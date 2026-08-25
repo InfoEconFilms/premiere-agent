@@ -1061,6 +1061,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         uxp_manifest = json.loads((uxp_dir / "manifest.json").read_text(encoding="utf-8"))
         uxp_html = (uxp_dir / "index.html").read_text(encoding="utf-8")
         uxp_js = (uxp_dir / "index.cjs").read_text(encoding="utf-8")
+        uxp_workflow = (uxp_dir / "premiere-agent-workflows.cjs").read_text(encoding="utf-8")
         uxp_notice = (uxp_dir / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
         if uxp_manifest.get("id") != "com.econfilms.premiereagent.uxp" or uxp_manifest.get("host", {}).get("app") != "premierepro":
             R.fail("Premiere UXP manifest contract", str(uxp_manifest)[:500])
@@ -1068,17 +1069,18 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere UXP manifest contract", "minVersion should match local Premiere UXP registration convention: 25.6")
         else:
             R.ok("Premiere UXP manifest contract")
-        if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "review-frames" not in uxp_html or "add-editorial-markers" not in uxp_html or "import-captions" not in uxp_html:
-            R.fail("Premiere UXP frontend contract", "missing core UI controls")
-        elif "require(\"premierepro\")" not in uxp_js or "fetch(bridgeUrl()" not in uxp_js or "export_sequence_review_frames" not in uxp_js or "add_editorial_markers" not in uxp_js or "import_captions" not in uxp_js or "/private/tmp/premiere-agent-review-frames" not in uxp_js:
-            R.fail("Premiere UXP frontend contract", "missing UXP API or CEP bridge calls")
-        elif "checkedLiveWritePayload" not in uxp_js or "backup_sequence_id" not in uxp_js:
-            R.fail("Premiere UXP live-write safety", "live-write controls must require backup identity and confirmation")
+        if "Premiere Agent" not in uxp_html or "bridge-url" not in uxp_html or "choose-workspace" not in uxp_html or "premiere-agent-workflows.cjs" not in uxp_html:
+            R.fail("Premiere UXP frontend contract", "missing reference UXP controls or Premiere Agent adapter script")
+        elif "require(\"premierepro\")" not in uxp_js or "createCommandRegistry" not in uxp_js or "WorkspaceSupport.createWorkspaceBroker" not in uxp_js:
+            R.fail("Premiere UXP frontend contract", "missing reference UXP command/workspace architecture")
+        elif "export_sequence_review_frames" not in uxp_workflow or "get_sequence_structure" not in uxp_workflow or "/private/tmp/premiere-agent-review-frames" not in uxp_workflow:
+            R.fail("Premiere UXP frontend contract", "missing Premiere Agent CEP fallback workflows")
         elif "MIT" not in uxp_notice or "premiere-pro-mcp" not in uxp_notice:
             R.fail("Premiere UXP attribution", "missing MIT third-party notice")
         else:
             R.ok("Premiere UXP frontend contract")
         node_check_uxp = subprocess.run(["node", "--check", "premiere_uxp/index.cjs"], cwd=str(PROJECT_ROOT), check=True, capture_output=True, text=True)
+        subprocess.run(["node", "--check", "premiere_uxp/premiere-agent-workflows.cjs"], cwd=str(PROJECT_ROOT), check=True, capture_output=True, text=True)
         R.ok("Premiere UXP syntax")
         node_check = """
 const t = require('./premiere_bridge/rpc_transport.js');

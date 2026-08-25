@@ -1,121 +1,15 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none'; base-uri 'none'">
-  <title>Premiere Agent</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <header class="hero">
-    <div>
-      <p class="eyebrow">Econ Films</p>
-      <h1>Premiere Agent</h1>
-    </div>
-    <span id="uxp-pill" class="pill warn">starting</span>
-  </header>
-
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2>Premiere state</h2>
-        <p>Read-only UXP probe from the active project/sequence.</p>
-      </div>
-      <button id="refresh-state">Refresh</button>
-    </div>
-    <dl class="grid">
-      <div><dt>Project</dt><dd id="project-state">—</dd></div>
-      <div><dt>Sequence</dt><dd id="sequence-state">—</dd></div>
-      <div><dt>Playhead</dt><dd id="playhead-state">—</dd></div>
-      <div><dt>Host</dt><dd id="host-state">Premiere UXP</dd></div>
-    </dl>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2>CEP live bridge</h2>
-        <p>Uses the proven local JSON-RPC bridge while UXP-native transport matures.</p>
-      </div>
-      <span id="cep-pill" class="pill warn">unchecked</span>
-    </div>
-    <label for="bridge-url">Bridge URL</label>
-    <input id="bridge-url" value="http://127.0.0.1:48791/jsonrpc" spellcheck="false" autocomplete="off">
-    <div class="actions">
-      <button id="check-bridge">Verify</button>
-      <button id="list-markers">List markers</button>
-      <button id="review-frames">Review frames</button>
-    </div>
-    <p class="help">Writes remain safety-gated in the bridge. Review-frame export uses the existing backup token and writes to <code>/private/tmp/premiere-agent-review-frames</code>.</p>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2>Live write tools</h2>
-        <p>Batch editorial markers and caption imports. Use only after backing up or duplicating the active sequence.</p>
-      </div>
-    </div>
-    <label class="check-row"><input id="live-confirm" type="checkbox"> I have backed up/duplicated the active sequence for this test.</label>
-    <label for="backup-id">Backup sequence ID/name</label>
-    <input id="backup-id" placeholder="e.g. altyeb_aggressive_sentence_story Copy Copy BACKUP" spellcheck="false" autocomplete="off">
-
-    <label for="marker-notes">Editorial marker notes <span class="hint">time | label | comment</span></label>
-    <textarea id="marker-notes" spellcheck="false">0 | AI REVIEW START | Start of review range
-4 | AI CHECK | Review gesture/timing here
-8 | AI CHECK | Review sentence flow here</textarea>
-    <div class="actions">
-      <button id="add-editorial-markers">Add editorial markers</button>
-    </div>
-
-    <label for="caption-path">Caption file path (.srt or .vtt)</label>
-    <input id="caption-path" placeholder="/absolute/path/to/master.srt" spellcheck="false" autocomplete="off">
-    <div class="row">
-      <div>
-        <label for="caption-start">Start seconds</label>
-        <input id="caption-start" value="0" inputmode="decimal">
-      </div>
-      <div>
-        <label for="caption-format">Caption format</label>
-        <input id="caption-format" value="subtitle" spellcheck="false">
-      </div>
-    </div>
-    <div class="actions">
-      <button id="choose-caption" class="secondary">Choose caption file</button>
-      <button id="import-captions">Import captions</button>
-    </div>
-    <p class="help">The bridge imports caption files into the project bin and reports whether Premiere exposes caption-track creation.</p>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2>Safety posture</h2>
-        <p>UXP first for documented APIs; CEP/QE only as an explicit fallback.</p>
-      </div>
-    </div>
-    <ul class="checks">
-      <li>Read-only probes are safe by default.</li>
-      <li>Live mutations require backup identity and explicit confirmation.</li>
-      <li>Frame/contact-sheet outputs must be file-verified before use.</li>
-    </ul>
-  </section>
-
-  <section class="card grow">
-    <div class="card-head">
-      <div>
-        <h2>Result</h2>
-        <p>Latest UXP or CEP response.</p>
-      </div>
-      <button id="copy-result">Copy</button>
-    </div>
-    <pre id="status" role="status" aria-live="polite" aria-atomic="true" tabindex="0">Starting…</pre>
-  </section>
-
-  <footer>
-    UI scaffold adapted from MIT-licensed Premiere Pro MCP panel patterns. See THIRD_PARTY_NOTICES.md.
-  </footer>
-
-  <script src="index.cjs"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'">
+<link rel="stylesheet" href="styles.css"></head><body>
+<h3>Premiere Agent</h3>
+<label for="bridge-url">Bridge URL</label><input id="bridge-url" value="ws://127.0.0.1:7777/uxp" spellcheck="false" autocomplete="off">
+<label for="bridge-token">Bridge token</label><input id="bridge-token" type="password" autocomplete="off">
+<button id="connect" aria-controls="status">Connect</button><button id="refresh" aria-controls="status">Refresh state</button>
+<h4>Approved workspace</h4>
+<p class="help">File-based UXP workflows are limited to one folder you choose. The bridge never returns its native path.</p>
+<button id="choose-workspace" aria-controls="workspace-status">Choose folder</button><button id="revoke-workspace" aria-controls="workspace-status">Revoke access</button>
+<pre id="workspace-status" role="status" aria-live="polite" aria-atomic="true">Loading workspace access…</pre>
+<pre id="status" role="status" aria-live="polite" aria-atomic="true" tabindex="0">Starting…</pre>
+<script src="protocol.cjs"></script><script src="transcript.cjs"></script><script src="workspace.cjs"></script><script src="events.cjs"></script><script src="hybrid-benchmark.cjs"></script><script src="workflows.cjs"></script><script src="advanced-workflows.cjs"></script><script src="next-workflows.cjs"></script><script src="commands.cjs"></script><script src="index.cjs"></script><script src="premiere-agent-workflows.cjs"></script>
+</body></html>

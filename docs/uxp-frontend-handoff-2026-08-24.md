@@ -74,20 +74,28 @@ UXP plugin id:
 com.econfilms.premiereagent.uxp
 ```
 
-The scaffold is a hybrid frontend:
+The scaffold has been reset to a reference-derived frontend:
 
-1. UXP panel for documented Premiere API reads and user-facing status UI.
-2. Existing CEP/ExtendScript JSON-RPC bridge for currently verified live tools and QE/ExtendScript fallbacks.
+1. `premiere_uxp/` is copied from the MIT-licensed `uxp-plugin/` reference build in `leancoderkavy/premiere-pro-mcp` and then rebranded/registerable as `com.econfilms.premiereagent.uxp`.
+2. The reference WebSocket bridge, command registry, workspace broker, event journal, transcript support, workflow modules, and capability probing are preserved as the authoritative UXP architecture.
+3. Econ/Premiere Agent additions live in a small separate adapter file: `premiere_uxp/premiere-agent-workflows.cjs`.
+4. The adapter adds only the currently useful local CEP fallback buttons: verify CEP, read sequence, list markers, and export review frames to `/private/tmp/premiere-agent-review-frames`.
 
-Current UXP panel controls:
+Current UXP panel controls inherited from the reference build:
 
-- refresh Premiere/project/sequence state;
-- verify CEP live bridge;
-- list markers;
-- export review frames;
-- add batch editorial markers with a required backup ID/name and confirmation checkbox;
-- choose/paste an SRT/VTT path and import captions through the CEP bridge scaffold;
-- show/copy latest JSON result.
+- connect to the UXP WebSocket bridge;
+- refresh/publish Premiere state;
+- choose/revoke an approved workspace folder;
+- show workspace/status output.
+
+Current Premiere Agent adapter controls:
+
+- verify the local CEP JSON-RPC bridge;
+- read the active sequence through the CEP bridge;
+- list active-sequence markers through the CEP bridge;
+- export review frames through the verified CEP fallback path.
+
+Do not re-add marker/caption write buttons directly to the starter panel until the reference UXP command surface and safety/verification contract are mapped deliberately for Econ workflows.
 
 The UI scaffold adapts MIT-licensed patterns from:
 

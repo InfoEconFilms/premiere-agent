@@ -1,214 +1,556 @@
 "use strict";
+const { entrypoints, host, storage } = require("uxp");
+const ppro = require("premierepro");
+const Protocol = globalThis.PremiereMcpProtocol;
+const TranscriptSupport = globalThis.PremiereMcpTranscript;
+const WorkspaceSupport = globalThis.PremiereMcpWorkspace;
+const EventSupport = globalThis.PremiereMcpEvents;
+const Commands = globalThis.PremiereMcpCommands;
+const workspaceBroker = WorkspaceSupport.createWorkspaceBroker({ fs: storage && storage.localFileSystem });
+const eventJournal = EventSupport.createEventJournal({ capacity: 512 });
+const commandRegistry = Commands.createCommandRegistry({
+  ppro,
+  Protocol,
+  workspace: workspaceBroker,
+  events: eventJournal,
+  storage: typeof globalThis !== "undefined" ? globalThis.localStorage : null,
+  transcriptImportHandler: importTranscript,
+  transcriptImportProbe: canImportTranscript
+});
+let socket = null;
+let reconnectTimer = null;
+let lastState = "";
+let stateRevision = 0;
+let fallbackPollTimer = null;
+const operationTracker = Protocol.createOperationTracker();
+const eventSubscriptions = [];
+const targetEventSubscriptions = [];
+let targetSubscriptionGeneration = 0;
 
-let uxp = null;
-let ppro = null;
-try { uxp = require("uxp"); } catch (_) {}
-try { ppro = require("premierepro"); } catch (_) {}
-
-const DEFAULT_BRIDGE_URL = "http://127.0.0.1:48791/jsonrpc";
-const REVIEW_OUTPUT_DIR = "/private/tmp/premiere-agent-review-frames";
-
-const els = {};
-let requestCounter = 1;
-
-if (uxp && uxp.entrypoints && typeof uxp.entrypoints.setup === "function") {
-  uxp.entrypoints.setup({
-    panels: {
-      premiereAgentPanel: {
-        create() {},
-        show() { refreshState(); },
-        destroy() {}
-      }
+entrypoints.setup({
+  panels: {
+    mcpBridgePanel: {
+      create() { subscribeHostEvents(); },
+      show() { publishState("panel.show"); },
+      destroy() { unsubscribeHostEvents(); stopFallbackPolling(); eventJournal.close(); void commandRegistry.dispose(); disconnect(); }
     }
-  });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  for (const id of [
-    "uxp-pill", "cep-pill", "bridge-url", "refresh-state", "check-bridge",
-    "list-markers", "review-frames", "copy-result", "status",
-    "project-state", "sequence-state", "playhead-state", "host-state",
-    "live-confirm", "backup-id", "marker-notes", "add-editorial-markers",
-    "caption-path", "caption-start", "caption-format", "choose-caption", "import-captions"
-  ]) els[id] = document.getElementById(id);
-
-  if (els["bridge-url"] && !els["bridge-url"].value) els["bridge-url"].value = DEFAULT_BRIDGE_URL;
-  bind("refresh-state", "click", refreshState);
-  bind("check-bridge", "click", verifyCepBridge);
-  bind("list-markers", "click", listMarkers);
-  bind("review-frames", "click", exportReviewFrames);
-  bind("add-editorial-markers", "click", addEditorialMarkers);
-  bind("choose-caption", "click", chooseCaptionFile);
-  bind("import-captions", "click", importCaptions);
-  bind("copy-result", "click", copyResult);
-  setPill("uxp-pill", ppro ? "UXP ready" : "UXP unavailable", ppro ? "ok" : "err");
-  refreshState();
+  }
+});
+document.addEventListener("DOMContentLoaded", async () => {
+  document.getElementById("connect").addEventListener("click", connect);
+  document.getElementById("refresh").addEventListener("click", () => publishState("manual"));
+  document.getElementById("choose-workspace").addEventListener("click", chooseWorkspace);
+  document.getElementById("revoke-workspace").addEventListener("click", revokeWorkspace);
+  try { await workspaceBroker.initialize(); } catch (error) { setStatus(error.message || String(error)); }
+  try { await commandRegistry.initialize(); } catch (error) { setStatus(error.message || String(error)); }
+  renderWorkspaceStatus();
+  subscribeHostEvents();
+  connect();
+  startFallbackPolling();
 });
 
-function bind(id, event, handler) {
-  if (els[id]) els[id].addEventListener(event, () => { Promise.resolve(handler()).catch(showError); });
+async function capabilities() {
+  const value = await commandRegistry.capabilities();
+  value.commands["capabilities.get"].cancellable = false;
+  value.commands["state.get"].cancellable = false;
+  value.commands["operation.cancel"] = { supported: true, readOnly: false, scope: "preflight only" };
+  if (value.commands["frame.export"]) Object.assign(value.commands["frame.export"], {
+    cancellable: "preflight only", verification: "exporter return value", undoable: false, atomic: false
+  });
+  const supportedHost = TranscriptSupport.versionAtLeast(host && host.version, "25.6.0");
+  const transcriptExportApi = supportedHost && !!(ppro.Transcript && ppro.Transcript.exportToJSON && ppro.Transcript.importFromJSON);
+  const transcriptNativeHasApi = supportedHost && !!(ppro.Transcript && typeof ppro.Transcript.hasTranscript === "function");
+  const transcriptHasApi = transcriptNativeHasApi || !!(supportedHost && ppro.Transcript && typeof ppro.Transcript.exportToJSON === "function");
+  Object.assign(value.commands, {
+    "transcript.export": { supported: transcriptExportApi, readOnly: true, minVersion: "25.6.0" },
+    "transcript.search": { supported: transcriptExportApi, readOnly: true, minVersion: "25.6.0" },
+    "transcript.has": {
+      supported: transcriptHasApi, readOnly: true, minVersion: transcriptNativeHasApi ? "26.3.0" : "25.6.0",
+      nativeCheckMinVersion: "26.3.0", nativeCheck: transcriptNativeHasApi,
+      fallback: transcriptNativeHasApi ? null : transcriptHasApi ? "export-probe" : null,
+      fallbackMinVersion: transcriptHasApi ? "25.6.0" : null
+    },
+    "captions.inspect": { supported: supportedHost, readOnly: true, minVersion: "25.6.0" },
+    "captions.create": { supported: false, reason: "No documented Premiere UXP caption creation API." },
+    "captions.update": { supported: false, reason: "No documented Premiere UXP caption text/timing mutation API." },
+    "captions.delete": { supported: false, reason: "No documented Premiere UXP caption deletion API." }
+  });
+  value.hostVersion = host && host.version || null;
+  Object.assign(value, {
+    events: {
+      host: supportedHostEvents().map((event) => event.name),
+      stateNotifications: true,
+      journal: eventJournal.status(),
+      fallbackPolling: { enabled: true, intervalMs: 5000 },
+      operationLifecycle: ["started", "progress", "completed", "failed", "cancelled"]
+    },
+    operationSemantics: {
+      mutations: "Only action-based commands executed by Project.executeTransaction may claim an undo boundary.",
+      rollback: "No atomic rollback is claimed. Callers must inspect result verification metadata.",
+      cancellation: "Cooperative before a non-cancellable Premiere host call; no interruption is claimed after that boundary."
+    },
+    fallback: { backend: "cep", reason: "Use CEP/QE only when a command is absent or reports unsupported; never silently retry a failed UXP mutation." }
+  });
+  return value;
 }
 
-function setPill(id, text, kind) {
-  const el = els[id];
-  if (!el) return;
-  el.textContent = text;
-  el.className = "pill " + (kind || "warn");
+function castClipProjectItem(item) {
+  try {
+    const clip = ppro.ClipProjectItem.cast(item);
+    if (clip) return clip;
+  } catch (_) {}
+  throw new Error("The resolved project item is not a media clip");
 }
 
-function show(value) {
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  if (els.status) els.status.textContent = text;
-}
-
-function showError(error) {
-  setPill("uxp-pill", "error", "err");
-  show({ ok: false, error: error && error.message ? error.message : String(error) });
-}
-
-function secondsLabel(value) {
-  if (value == null || !isFinite(Number(value))) return "—";
-  return Number(value).toFixed(3) + "s";
-}
-
-async function refreshState() {
-  if (!ppro || !ppro.Project || typeof ppro.Project.getActiveProject !== "function") {
-    setPill("uxp-pill", "UXP API unavailable", "err");
-    show({ ok: false, backend: "uxp", error: "Premiere UXP API unavailable. Open this panel inside Premiere Pro 25.6+." });
-    return;
+async function selectedClipProjectItem(project) {
+  if (!ppro.ProjectUtils || typeof ppro.ProjectUtils.getSelection !== "function") {
+    throw new Error("Project panel selection is unavailable; pass projectItemId or projectItemName");
   }
+  const selection = await ppro.ProjectUtils.getSelection(project);
+  const items = selection && await selection.getItems();
+  if (!items || items.length !== 1) throw new Error("Select exactly one media project item, or pass projectItemId/projectItemName");
+  return castClipProjectItem(items[0]);
+}
+
+async function findProjectItem(project, args) {
+  const wantedId = args && args.projectItemId != null ? String(args.projectItemId) : "";
+  const wantedName = args && args.projectItemName != null ? String(args.projectItemName) : "";
+  if (!wantedId && !wantedName) return selectedClipProjectItem(project);
+  const queue = [await project.getRootItem()];
+  while (queue.length) {
+    const folder = queue.shift();
+    const children = await folder.getItems();
+    for (let i = 0; i < children.length; i += 1) {
+      const item = children[i];
+      const itemId = typeof item.getId === "function" ? String(item.getId()) : "";
+      const candidate = TranscriptSupport.matchingClipCandidate(
+        item, itemId, wantedId, wantedName, castClipProjectItem
+      );
+      if (candidate.clip) return candidate.clip;
+      try {
+        const childFolder = ppro.FolderItem.cast(item);
+        if (childFolder) queue.push(childFolder);
+      } catch (_) {}
+    }
+  }
+  throw new Error("Project item not found");
+}
+
+async function transcriptContext(args) {
   const project = await ppro.Project.getActiveProject();
-  const sequence = project && typeof project.getActiveSequence === "function" ? await project.getActiveSequence() : null;
-  let position = null;
-  try { if (sequence && typeof sequence.getPlayerPosition === "function") position = await sequence.getPlayerPosition(); } catch (_) {}
-  const state = {
-    ok: true,
-    backend: "uxp",
+  if (!project) throw new Error("No active project");
+  if (!ppro.Transcript || typeof ppro.Transcript.exportToJSON !== "function") throw new Error("Transcript APIs require Premiere Pro 25.6 or newer");
+  const clip = await findProjectItem(project, args || {});
+  const projectItem = ppro.ProjectItem.cast(clip);
+  return { project, clip, projectItemId: String(projectItem.getId()), projectItemName: clip.name };
+}
+
+async function exportTranscript(args) {
+  const context = await transcriptContext(args);
+  const json = await ppro.Transcript.exportToJSON(context.clip);
+  if (typeof json !== "string" || !json) throw new Error("The selected clip has no transcript");
+  TranscriptSupport.parseTranscriptJSON(json);
+  return { projectItemId: context.projectItemId, projectItemName: context.projectItemName, json };
+}
+
+async function searchTranscript(args) {
+  const exported = await exportTranscript(args);
+  const result = TranscriptSupport.searchTranscriptJSON(exported.json, args.query, {
+    caseSensitive: args.caseSensitive, maxResults: args.maxResults
+  });
+  return Object.assign({ projectItemId: exported.projectItemId, projectItemName: exported.projectItemName }, result);
+}
+
+async function hasTranscript(args) {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("No active project");
+  if (!ppro.Transcript) throw new Error("Transcript APIs require Premiere Pro 25.6 or newer");
+  const clip = await findProjectItem(project, args || {});
+  const projectItem = ppro.ProjectItem.cast(clip);
+  const context = { projectItemId: String(projectItem.getId()), projectItemName: clip.name, clip };
+  if (typeof ppro.Transcript.hasTranscript === "function") {
+    return { projectItemId: context.projectItemId, projectItemName: context.projectItemName, hasTranscript: !!ppro.Transcript.hasTranscript(context.clip), method: "native" };
+  }
+  if (typeof ppro.Transcript.exportToJSON !== "function") throw new Error("This Premiere build cannot check transcripts");
+  const present = await TranscriptSupport.probeTranscriptExport(function () {
+    return ppro.Transcript.exportToJSON(context.clip);
+  });
+  return { projectItemId: context.projectItemId, projectItemName: context.projectItemName, hasTranscript: present, method: "export-probe" };
+}
+
+function canImportTranscript() {
+  return TranscriptSupport.versionAtLeast(host && host.version, "25.6.0")
+    && !!(ppro.Transcript && typeof ppro.Transcript.exportToJSON === "function")
+    && typeof ppro.Transcript.importFromJSON === "function"
+    && typeof ppro.Transcript.createImportTextSegmentsAction === "function";
+}
+
+async function importTranscript(args) {
+  if (!args || typeof args.json !== "string") throw new Error("json is required");
+  TranscriptSupport.parseTranscriptJSON(args.json);
+  const context = await transcriptContext(args);
+  if (typeof ppro.Transcript.createImportTextSegmentsAction !== "function") throw new Error("This Premiere build cannot create transcript import actions");
+  const textSegments = ppro.Transcript.importFromJSON(args.json);
+  let committed = false;
+  context.project.lockedAccess(function () {
+    committed = context.project.executeTransaction(function (compoundAction) {
+      compoundAction.addAction(ppro.Transcript.createImportTextSegmentsAction(textSegments, context.clip));
+    }, "Import transcript");
+  });
+  if (!committed) throw new Error("Premiere rejected the transcript import transaction");
+  return { imported: true, projectItemId: context.projectItemId, projectItemName: context.projectItemName, undoable: true };
+}
+
+async function inspectCaptions() {
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("No active project");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("No active sequence");
+  const count = await sequence.getCaptionTrackCount();
+  const tracks = [];
+  for (let i = 0; i < count; i += 1) {
+    const track = await sequence.getCaptionTrack(i);
+    const items = await track.getTrackItems(ppro.Constants.TrackItemType.CLIP, false);
+    tracks.push({ id: track.id, index: await track.getIndex(), name: track.name, muted: await track.isMuted(), itemCount: items ? items.length : 0 });
+  }
+  return { sequenceId: String(sequence.guid), sequenceName: sequence.name, trackCount: count, tracks };
+}
+
+async function stateSnapshot() {
+  const project = await ppro.Project.getActiveProject();
+  const sequence = project && await project.getActiveSequence();
+  const position = sequence && await sequence.getPlayerPosition();
+  return {
+    revision: stateRevision,
     projectOpen: !!project,
+    project: project ? { id: project.guid || null, name: project.name || null, path: project.path || null } : null,
     sequenceOpen: !!sequence,
-    project: project ? { guid: String(project.guid || ""), name: String(project.name || "") } : null,
-    sequence: sequence ? { guid: String(sequence.guid || ""), name: String(sequence.name || "") } : null,
-    playheadSeconds: position && position.seconds != null ? Number(position.seconds) : null,
-    cepFallback: { url: bridgeUrl(), purpose: "existing localhost JSON-RPC bridge for ExtendScript/QE compatibility" }
+    sequence: sequence ? { id: sequence.guid || null, name: sequence.name || null } : null,
+    playheadSeconds: position ? position.seconds : null
   };
-  setPill("uxp-pill", state.sequenceOpen ? "sequence open" : state.projectOpen ? "project open" : "no project", state.projectOpen ? "ok" : "warn");
-  if (els["project-state"]) els["project-state"].textContent = state.project ? state.project.name || state.project.guid : "No project";
-  if (els["sequence-state"]) els["sequence-state"].textContent = state.sequence ? state.sequence.name || state.sequence.guid : "No sequence";
-  if (els["playhead-state"]) els["playhead-state"].textContent = secondsLabel(state.playheadSeconds);
-  if (els["host-state"]) els["host-state"].textContent = "Premiere UXP";
-  show(state);
 }
 
-function bridgeUrl() {
-  const raw = els["bridge-url"] && els["bridge-url"].value ? els["bridge-url"].value : DEFAULT_BRIDGE_URL;
-  return raw.trim() || DEFAULT_BRIDGE_URL;
+async function exportFrame(args, operation) {
+  assertNotCancelled(operation);
+  publishOperation("progress", operation, { phase: "preflight", progress: 0.1 });
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error("No active project");
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error("No active sequence");
+  if (!args.outputDirectory) throw new Error("outputDirectory is required");
+  const outputDirectory = await workspaceBroker.assertPathAllowed(args.outputDirectory, { label: "outputDirectory", kind: "directory" });
+  const filename = Protocol.safeFilename(args.filename);
+  const position = args.seconds == null ? await sequence.getPlayerPosition() : await tickTime(args.seconds);
+  const size = await sequence.getFrameSize();
+  const width = positiveInt(args.width, size.width), height = positiveInt(args.height, size.height);
+  assertNotCancelled(operation);
+  operation.phase = "host_call";
+  publishOperation("progress", operation, { phase: "host_call", progress: 0.4, cancellable: false });
+  const returned = await ppro.Exporter.exportSequenceFrame(sequence, position, filename, outputDirectory, width, height);
+  const path = Protocol.joinPath(outputDirectory, filename);
+  return {
+    path, width, height, seconds: position.seconds, exporterResult: returned,
+    operation: Protocol.operationSemantics({
+      mutatesProject: false,
+      verificationStatus: "not_verified",
+      verificationBoundary: "exporter_return_value",
+      verificationEvidence: [{ type: "host_return", value: returned }],
+      cancellationSupported: true
+    })
+  };
 }
 
-async function cepRpc(method, params) {
-  const payload = { jsonrpc: "2.0", id: requestCounter++, method, params: params || {} };
-  const response = await fetch(bridgeUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+async function tickTime(seconds) {
+  if (ppro.TickTime && typeof ppro.TickTime.createWithSeconds === "function") return ppro.TickTime.createWithSeconds(Number(seconds));
+  throw new Error("This Premiere build cannot create TickTime; omit seconds to capture the playhead");
+}
+function positiveInt(value, fallback) { const n = Number(value == null ? fallback : value); if (!Number.isFinite(n) || n <= 0) throw new Error("frame dimensions must be positive"); return Math.round(n); }
+
+async function dispatch(raw) {
+  let cmd;
+  let operation;
+  try {
+    cmd = Protocol.parseCommand(raw);
+    if (cmd.command === "operation.cancel") {
+      const result = operationTracker.requestCancel(cmd.args.requestId);
+      send(Protocol.envelope("result", { ok: true, result }, cmd.requestId));
+      return;
+    }
+    operation = operationTracker.begin(cmd.requestId, cmd.command);
+    publishOperation("started", operation, { phase: "preflight", progress: 0 });
+    let result;
+    if (cmd.command === "capabilities.get") result = await capabilities();
+    else if (cmd.command === "state.get") result = await stateSnapshot();
+    else if (cmd.command === "frame.export") result = await exportFrame(cmd.args, operation);
+    else if (cmd.command === "transcript.export") result = await exportTranscript(cmd.args);
+    else if (cmd.command === "transcript.search") result = await searchTranscript(cmd.args);
+    else if (cmd.command === "transcript.has") result = await hasTranscript(cmd.args);
+    else if (cmd.command === "captions.inspect") result = await inspectCaptions();
+    else {
+      assertNotCancelled(operation);
+      operation.phase = "host_call";
+      result = await commandRegistry.dispatch(cmd.command, cmd.args);
+    }
+    const response = Protocol.envelope("result", {
+      ok: true,
+      result,
+      operation: result && result.operation
+        ? result.operation
+        : Protocol.operationSemantics(
+          (cmd.command.indexOf("transition.video.") === 0 && cmd.command !== "transition.video.list") || cmd.command === "transcript.import"
+            ? {
+                mutatesProject: true,
+                verificationStatus: "verified",
+                verificationBoundary: "project_executeTransaction_return",
+                verificationEvidence: [{ type: "transaction", accepted: true }],
+                undoSupported: true,
+                undoLabel: cmd.command === "transcript.import"
+                  ? "Import transcript"
+                  : cmd.command === "transition.video.add"
+                    ? "Add video transition"
+                    : "Remove video transition",
+                transactionActionGroup: true,
+                cancellationSupported: true
+              }
+            : {
+                mutatesProject: false,
+                verificationStatus: "verified",
+                verificationBoundary: "host_snapshot"
+              }
+        )
+    }, cmd.requestId);
+    // Validate the exact response before emitting a terminal success event. If
+    // serialization rejects an oversized result, the catch path emits only
+    // `failed`, never both `completed` and `failed` for one operation.
+    Protocol.serializeEnvelope(response);
+    publishOperation("completed", operation, { phase: "complete", progress: 1 });
+    send(response);
+  } catch (error) {
+    const cancelled = error && error.code === "UXP_OPERATION_CANCELLED";
+    const errorCode = cancelled
+      ? "UXP_OPERATION_CANCELLED"
+      : error && typeof error.code === "string" && /^UXP_[A-Z0-9_]+$/.test(error.code)
+        ? error.code
+        : "UXP_COMMAND_FAILED";
+    if (operation) publishOperation(cancelled ? "cancelled" : "failed", operation, {
+      phase: operation.phase, progress: null, error: error.message || String(error)
+    });
+    send(Protocol.envelope("result", {
+      ok: false,
+      error: {
+        code: errorCode,
+        message: error.message || String(error),
+        operation: Protocol.operationSemantics({ cancellationSupported: true })
+      }
+    }, cmd && cmd.requestId));
+  } finally {
+    if (operation) operationTracker.finish(operation);
+  }
+}
+
+function connect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (socket) try { socket.onclose = null; socket.close(); } catch (_) {}
+  const configuredUrl = document.getElementById("bridge-url").value;
+  const token = document.getElementById("bridge-token").value;
+  let url;
+  try {
+    url = WorkspaceSupport.validateLoopbackBridgeUrl(configuredUrl);
+    if (token) url.searchParams.set("token", token);
+    url = url.toString();
+  } catch (_) {
+    return scheduleReconnect("Invalid bridge URL");
+  }
+  setStatus("Connecting to " + url.origin + url.pathname);
+  try { socket = new WebSocket(url); } catch (e) { return scheduleReconnect(e.message); }
+  socket.onopen = async () => { setStatus("Connected"); send(Protocol.envelope("hello", await capabilities())); publishState("connected"); };
+  socket.onmessage = (event) => dispatch(event.data);
+  socket.onerror = () => setStatus("Bridge connection error");
+  socket.onclose = () => { void commandRegistry.dispose(); scheduleReconnect("Disconnected"); };
+}
+function scheduleReconnect(message) { setStatus(message + "; retrying in 2s"); reconnectTimer = setTimeout(connect, 2000); }
+function send(value) { if (socket && socket.readyState === WebSocket.OPEN) socket.send(Protocol.serializeEnvelope(value)); }
+function disconnect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  if (socket) try { socket.onclose = null; socket.close(); } catch (_) {}
+  socket = null;
+}
+function publishOperation(name, operation, detail) {
+  send(Protocol.operationEvent(name, operation, detail));
+}
+function assertNotCancelled(operation) {
+  if (!operation || !operation.cancelRequested) return;
+  const error = new Error("Operation cancelled before the Premiere host call");
+  error.code = "UXP_OPERATION_CANCELLED";
+  throw error;
+}
+function supportedHostEvents() {
+  const constants = ppro.Constants || {};
+  const project = constants.ProjectEvent || {};
+  const sequence = constants.SequenceEvent || {};
+  const operation = constants.OperationCompleteEvent || {};
+  const encoder = ppro.EncoderManager || {};
+  return [
+    hostEvent("project", "project.opened", project.OPENED, true),
+    hostEvent("project", "project.closed", project.CLOSED, true),
+    hostEvent("project", "project.dirty", project.DIRTY, true),
+    hostEvent("project", "project.activated", project.ACTIVATED, true),
+    hostEvent("project", "project.selection.changed", project.PROJECT_ITEM_SELECTION_CHANGED, true),
+    hostEvent("sequence", "sequence.activated", sequence.ACTIVATED, true),
+    hostEvent("sequence", "sequence.closed", sequence.CLOSED, true),
+    hostEvent("sequence", "sequence.selection.changed", sequence.SELECTION_CHANGED, true),
+    hostEvent("operation", "operation.import.complete", operation.IMPORT_MEDIA_COMPLETE || operation.EVENT_IMPORT_MEDIA_COMPLETE, false),
+    hostEvent("operation", "operation.export.complete", operation.EXPORT_MEDIA_COMPLETE || operation.EVENT_EXPORT_MEDIA_COMPLETE, false),
+    hostEvent("operation", "operation.effect.drop.complete", operation.EFFECT_DROP_COMPLETE || operation.EVENT_EFFECT_DROP_COMPLETE, false),
+    hostEvent("operation", "operation.generative.extend.complete", operation.GENERATIVE_EXTEND_COMPLETE || operation.EVENT_GENERATIVE_EXTEND_COMPLETE, false),
+    hostEvent("encoder", "encoder.queued", encoder.EVENT_RENDER_QUEUE, false),
+    hostEvent("encoder", "encoder.progress", encoder.EVENT_RENDER_PROGRESS, false, "encoder.progress"),
+    hostEvent("encoder", "encoder.complete", encoder.EVENT_RENDER_COMPLETE, false),
+    hostEvent("encoder", "encoder.error", encoder.EVENT_RENDER_ERROR, false),
+    hostEvent("encoder", "encoder.cancelled", encoder.EVENT_RENDER_CANCEL, false)
+  ].filter((event) => event.eventName !== undefined && event.eventName !== null);
+}
+function hostEvent(category, name, eventName, stateInvalidating, coalesceKey) {
+  return { category, name, eventName, stateInvalidating, coalesceKey: coalesceKey || null };
+}
+function subscribeHostEvents() {
+  if (!ppro.EventManager) return;
+  if (!eventSubscriptions.length) {
+    supportedHostEvents().forEach((definition) => {
+      const handler = (event) => recordHostEvent(definition, event);
+      ppro.EventManager.addGlobalEventListener(definition.eventName, handler, false);
+      eventSubscriptions.push({ eventName: definition.eventName, handler });
+    });
+  }
+  void rebindTrackEvents();
+}
+function unsubscribeHostEvents() {
+  if (!ppro.EventManager) return;
+  unsubscribeTrackEvents();
+  eventSubscriptions.splice(0).forEach(({ eventName, handler }) => {
+    try { ppro.EventManager.removeGlobalEventListener(eventName, handler, false); } catch (_) {}
   });
-  const text = await response.text();
-  let parsed = null;
-  try { parsed = text ? JSON.parse(text) : null; } catch (error) { throw new Error("CEP bridge returned non-JSON: " + text); }
-  if (!response.ok) throw new Error("CEP bridge HTTP " + response.status + ": " + text);
-  if (parsed && parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-  setPill("cep-pill", "connected", "ok");
-  show(parsed);
-  return parsed;
 }
-
-async function verifyCepBridge() {
-  return cepRpc("verify_premiere_connection", {});
+function recordHostEvent(definition, event) {
+  const detail = {};
+  if (event && typeof event === "object") {
+    if (Number.isFinite(Number(event.state))) detail.state = Number(event.state);
+    if (Number.isFinite(Number(event.progress))) detail.progress = Number(event.progress);
+  }
+  const receipt = eventJournal.recordHostEvent({
+    category: definition.category,
+    name: definition.name,
+    detail,
+    coalesceKey: definition.coalesceKey
+  });
+  if (receipt) send(Protocol.envelope("event", { name: "premiere.host.event", receipt }));
+  if (definition.stateInvalidating) publishState("host-event", definition.name);
+  if (definition.name === "project.opened" || definition.name === "project.closed" ||
+    definition.name === "project.activated" || definition.name === "sequence.activated" ||
+    definition.name === "sequence.closed") void rebindTrackEvents();
 }
-
-async function listMarkers() {
-  return cepRpc("list_markers", {});
+async function rebindTrackEvents() {
+  if (!ppro.EventManager || typeof ppro.EventManager.addEventListener !== "function") return;
+  const generation = ++targetSubscriptionGeneration;
+  unsubscribeTrackEvents(false);
+  try {
+    const project = await ppro.Project.getActiveProject();
+    const sequence = project && await project.getActiveSequence();
+    if (!sequence || generation !== targetSubscriptionGeneration) return;
+    const definitions = [
+      { mediaType: "video", countMethod: "getVideoTrackCount", getMethod: "getVideoTrack", api: ppro.VideoTrack },
+      { mediaType: "audio", countMethod: "getAudioTrackCount", getMethod: "getAudioTrack", api: ppro.AudioTrack }
+    ];
+    for (let d = 0; d < definitions.length; d += 1) {
+      const definition = definitions[d];
+      if (typeof sequence[definition.countMethod] !== "function" || typeof sequence[definition.getMethod] !== "function") continue;
+      const count = Math.min(256, Math.max(0, Number(await sequence[definition.countMethod]()) || 0));
+      for (let index = 0; index < count; index += 1) {
+        if (generation !== targetSubscriptionGeneration) return;
+        const track = await sequence[definition.getMethod](index);
+        if (generation !== targetSubscriptionGeneration) return;
+        if (!track) continue;
+        const eventKinds = [
+          ["changed", definition.api && definition.api.EVENT_TRACK_CHANGED],
+          ["info_changed", definition.api && definition.api.EVENT_TRACK_INFO_CHANGED],
+          ["lock_changed", definition.api && definition.api.EVENT_TRACK_LOCK_CHANGED]
+        ];
+        for (let e = 0; e < eventKinds.length; e += 1) {
+          const kind = eventKinds[e][0], eventName = eventKinds[e][1];
+          if (eventName == null) continue;
+          const handler = () => recordTrackEvent(definition.mediaType, index, kind);
+          ppro.EventManager.addEventListener(track, eventName, handler, false);
+          targetEventSubscriptions.push({ target: track, eventName, handler });
+        }
+      }
+    }
+  } catch (_) {}
 }
-
-async function exportReviewFrames() {
-  return cepRpc("export_sequence_review_frames", {
-    backup_sequence_id: "manual_backup_confirmed_for_review_frame_export",
-    output_dir: REVIEW_OUTPUT_DIR,
-    frame_count: 4,
-    range_start_s: 0,
-    range_end_s: 12
+function unsubscribeTrackEvents(incrementGeneration = true) {
+  if (incrementGeneration) targetSubscriptionGeneration += 1;
+  targetEventSubscriptions.splice(0).forEach(({ target, eventName, handler }) => {
+    try { ppro.EventManager.removeEventListener(target, eventName, handler); } catch (_) {}
   });
 }
-
-function checkedLiveWritePayload() {
-  const confirmed = !!(els["live-confirm"] && els["live-confirm"].checked);
-  const backupId = els["backup-id"] && els["backup-id"].value ? els["backup-id"].value.trim() : "";
-  if (!confirmed) throw new Error("Tick the live-write confirmation after backing up/duplicating the active sequence.");
-  if (!backupId) throw new Error("Enter the backup sequence ID/name before live-write actions.");
-  return { sequence_id: "active_sequence", backup_sequence_id: backupId };
+function recordTrackEvent(mediaType, trackIndex, eventKind) {
+  const receipt = eventJournal.recordHostEvent({
+    category: "track",
+    name: "track." + mediaType + "." + eventKind,
+    detail: { mediaType, trackIndex, eventKind }
+  });
+  if (receipt) send(Protocol.envelope("event", { name: "premiere.host.event", receipt }));
 }
+function startFallbackPolling() {
+  if (!fallbackPollTimer) fallbackPollTimer = setInterval(() => publishState("fallback-poll"), 5000);
+}
+function stopFallbackPolling() {
+  if (fallbackPollTimer) clearInterval(fallbackPollTimer);
+  fallbackPollTimer = null;
+}
+async function publishState(reason, hostEvent) {
+  try {
+    stateRevision += 1;
+    const state = await stateSnapshot();
+    const comparable = Object.assign({}, state, { revision: 0 });
+    const encoded = JSON.stringify(comparable);
+    if (reason !== "fallback-poll" || encoded !== lastState) {
+      lastState = encoded;
+      send(Protocol.envelope("event", {
+        name: "premiere.state.changed",
+        reason,
+        hostEvent: hostEvent || null,
+        state
+      }));
+    }
+  } catch (e) { setStatus(e.message); }
+}
+function setStatus(value) { const el = document.getElementById("status"); if (el) el.textContent = value; }
 
-function parseMarkerNotes(text) {
-  const notes = [];
-  const lines = String(text || "").split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.charAt(0) === "#") continue;
-    const parts = trimmed.indexOf("|") !== -1 ? trimmed.split("|") : trimmed.split(",");
-    const timeS = Number((parts[0] || "").trim());
-    if (!isFinite(timeS) || timeS < 0) throw new Error("Bad marker time in line: " + line);
-    const label = (parts[1] || "AI EDITORIAL NOTE").trim() || "AI EDITORIAL NOTE";
-    const comment = (parts.slice(2).join("|") || "").trim();
-    notes.push({ time_s: timeS, kind: "uxp_editorial_note", label, comment, color_index: 1 });
+async function chooseWorkspace() {
+  try {
+    setStatus("Choose the folder that contains approved media, presets, and exports");
+    await workspaceBroker.requestRoot();
+    renderWorkspaceStatus();
+    setStatus("Workspace access granted");
+  } catch (error) {
+    setStatus(error.message || String(error));
   }
-  if (!notes.length) throw new Error("Add at least one marker note line: time | label | comment");
-  return notes;
 }
 
-async function addEditorialMarkers() {
-  const safe = checkedLiveWritePayload();
-  return cepRpc("add_editorial_markers", Object.assign(safe, {
-    default_color: "red",
-    notes: parseMarkerNotes(els["marker-notes"] ? els["marker-notes"].value : "")
-  }));
-}
-
-async function chooseCaptionFile() {
-  if (!uxp || !uxp.storage || !uxp.storage.localFileSystem || typeof uxp.storage.localFileSystem.getFileForOpening !== "function") {
-    throw new Error("UXP file picker unavailable; paste an absolute .srt/.vtt path instead.");
+async function revokeWorkspace() {
+  try {
+    await workspaceBroker.revoke();
+    renderWorkspaceStatus();
+    setStatus("Workspace access revoked");
+  } catch (error) {
+    setStatus(error.message || String(error));
   }
-  const file = await uxp.storage.localFileSystem.getFileForOpening({ types: ["srt", "vtt"] });
-  if (!file) return null;
-  const path = file.nativePath || file.fsName || file.path || "";
-  if (!path) throw new Error("Selected file did not expose a native path; paste the absolute caption path instead.");
-  if (els["caption-path"]) els["caption-path"].value = path;
-  show({ ok: true, selected_caption_path: path });
-  return path;
 }
 
-async function importCaptions() {
-  const safe = checkedLiveWritePayload();
-  const path = els["caption-path"] && els["caption-path"].value ? els["caption-path"].value.trim() : "";
-  if (!path) throw new Error("Choose or paste an absolute .srt/.vtt caption path first.");
-  const start = Number(els["caption-start"] && els["caption-start"].value ? els["caption-start"].value : 0);
-  if (!isFinite(start) || start < 0) throw new Error("Caption start seconds must be a non-negative number.");
-  return cepRpc("import_captions", Object.assign(safe, {
-    caption_path: path,
-    start_s: start,
-    caption_format: els["caption-format"] && els["caption-format"].value ? els["caption-format"].value.trim() : "subtitle"
-  }));
-}
-
-async function copyResult() {
-  const text = els.status ? els.status.textContent : "";
-  if (!text) return;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const area = document.createElement("textarea");
-  area.value = text;
-  document.body.appendChild(area);
-  area.select();
-  document.execCommand("copy");
-  document.body.removeChild(area);
+function renderWorkspaceStatus() {
+  const element = document.getElementById("workspace-status"), value = workspaceBroker.status();
+  if (element) element.textContent = value.configured
+    ? "Approved folder: " + value.rootName + "\nPersistent access: yes\nNative path: redacted\nCanonical path validation: " + value.canonicalPathValidation
+    : "No approved workspace folder";
 }
