@@ -902,6 +902,18 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         else:
             R.ok("MCP import captions dry-run")
 
+        media_dry = pam.handle("tools/call", {"name": "premiere_agent_import_media", "arguments": {"sequence_id": "seq1", "media_path": str(tmp / "graphic.mp4")}})
+        if "import_media" not in media_dry["content"][0]["text"] or "dry_run" not in media_dry["content"][0]["text"]:
+            R.fail("MCP import media dry-run", media_dry["content"][0]["text"])
+        else:
+            R.ok("MCP import media dry-run")
+
+        media_denied = pam.handle("tools/call", {"name": "premiere_agent_import_media", "arguments": {"sequence_id": "seq1", "media_path": str(tmp / "graphic.mp4"), "dry_run": False}})
+        if not media_denied.get("isError") or "confirm=True" not in media_denied["content"][0]["text"]:
+            R.fail("MCP import media safety gate", str(media_denied))
+        else:
+            R.ok("MCP import media safety gate")
+
         editorial_dry = pam.handle("tools/call", {"name": "premiere_agent_add_editorial_markers", "arguments": {"sequence_id": "seq1", "notes": [{"time_s": 2, "kind": "retake", "label": "AI RETAKE"}]}})
         if "add_editorial_markers" not in editorial_dry["content"][0]["text"] or "dry_run" not in editorial_dry["content"][0]["text"]:
             R.fail("MCP add editorial markers dry-run", editorial_dry["content"][0]["text"])
@@ -982,6 +994,20 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge caption import scaffold", str(captions))
         else:
             R.ok("Premiere bridge caption import scaffold")
+        graphic = tmp / "graphic.mp4"
+        graphic.write_bytes(b"placeholder")
+        media = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 35, "method": "import_media", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "media_path": str(graphic), "time_s": 5.0, "track": "V2"}})
+        media_result = (media or {}).get("result") or {}
+        imported = media_result.get("imported") or {}
+        if not media_result.get("ok") or not imported.get("id") or imported.get("media_path") != str(graphic.resolve()) or imported.get("track") != "V2":
+            R.fail("Premiere bridge media import", str(media))
+        else:
+            R.ok("Premiere bridge media import")
+        denied_media = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 36, "method": "import_media", "params": {"sequence_id": "seq_main", "media_path": str(graphic)}})
+        if not denied_media or "error" not in denied_media:
+            R.fail("Premiere bridge media import backup enforcement", str(denied_media))
+        else:
+            R.ok("Premiere bridge media import backup enforcement")
         denied_bridge = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 4, "method": "queue_export", "params": {"sequence_id": "seq_main", "output_path": str(tmp / "x.mp4")}})
         if not denied_bridge or "error" not in denied_bridge:
             R.fail("Premiere bridge backup enforcement", str(denied_bridge))
@@ -1049,7 +1075,7 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
         js = (bridge_dir / "main.js").read_text(encoding="utf-8")
         transport = (bridge_dir / "rpc_transport.js").read_text(encoding="utf-8")
         shim = (bridge_dir / "lib" / "CSInterface.js").read_text(encoding="utf-8")
-        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport or "list_markers" not in transport or "export_sequence_review_frames" not in transport or "import_captions" not in transport or "add_editorial_markers" not in transport:
+        if "startBridgeServer" not in js or "48791" not in js or "METHOD_MAP" not in transport or "list_markers" not in transport or "export_sequence_review_frames" not in transport or "import_captions" not in transport or "import_media" not in transport or "add_editorial_markers" not in transport:
             R.fail("Premiere CEP HTTP transport contract", "missing transport wiring")
         else:
             R.ok("Premiere CEP HTTP transport contract")
@@ -1097,6 +1123,157 @@ const t = require('./premiere_bridge/rpc_transport.js');
     except Exception as e:
         traceback.print_exc()
         R.fail("Premiere Agent MCP", f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 10b. MCP orchestrator layer — resources, prompts, orchestrator job manifest
+# ---------------------------------------------------------------------------
+
+def test_mcp_orchestrator_layer(R: Results, tmp: Path) -> None:
+    _section("Premiere Agent MCP orchestrator layer")
+    try:
+        import premiere_agent_mcp as pam  # type: ignore[import-not-found]
+
+        tools = pam.handle("tools/list", {})["tools"]
+        names = {t["name"] for t in tools}
+        if "premiere_agent_create_orchestrator_job" not in names or "premiere_agent_verify_orchestrator_job" not in names:
+            R.fail("MCP orchestrator tools/list", str(names))
+        else:
+            R.ok("MCP orchestrator tools/list")
+
+        resources = pam.handle("resources/list", {})["resources"]
+        resource_uris = {r["uri"] for r in resources}
+        expected_uris = {
+            "config://premiere-agent/safety-policy",
+            "config://premiere-agent/live-bridge-protocol",
+            "config://premiere-agent/orchestrator-contract",
+            "config://premiere-agent/workflow-skills",
+        }
+        if not expected_uris.issubset(resource_uris):
+            R.fail("MCP resources/list", str(resource_uris))
+        else:
+            R.ok("MCP resources/list")
+
+        policy_read = pam.handle("resources/read", {"uri": "config://premiere-agent/safety-policy"})
+        policy_text = policy_read["contents"][0]["text"]
+        if "duplicate" not in policy_text.lower() or "verify" not in policy_text.lower():
+            R.fail("MCP safety-policy resource", policy_text)
+        else:
+            R.ok("MCP safety-policy resource")
+
+        prompts = pam.handle("prompts/list", {})["prompts"]
+        prompt_names = {p["name"] for p in prompts}
+        expected_prompts = {
+            "premiere_orchestrator_talking_head",
+            "premiere_orchestrator_batch_export",
+            "premiere_orchestrator_motion_graphic_for_range",
+            "premiere_orchestrator_caption_pass",
+            "premiere_orchestrator_sequence_qa",
+        }
+        if not expected_prompts.issubset(prompt_names):
+            R.fail("MCP prompts/list", str(prompt_names))
+        else:
+            R.ok("MCP prompts/list")
+
+        prompt_get = pam.handle("prompts/get", {"name": "premiere_orchestrator_talking_head", "arguments": {"sequence_id": "seq1"}})
+        prompt_text = "\n".join(m["content"]["text"] for m in prompt_get["messages"])
+        if "verify_premiere_connection" not in prompt_text or "duplicate_sequence" not in prompt_text or "backup_sequence_id" not in prompt_text:
+            R.fail("MCP talking-head prompt content", prompt_text[:500])
+        else:
+            R.ok("MCP talking-head prompt content")
+
+        manifest_path = tmp / "orchestrator_jobs" / "talking_head.json"
+        created = pam.handle("tools/call", {
+            "name": "premiere_agent_create_orchestrator_job",
+            "arguments": {"job_type": "talking_head", "sequence_id": "seq1", "output_path": str(manifest_path)},
+        })
+        if created.get("isError") or not manifest_path.exists():
+            R.fail("MCP create orchestrator job", str(created))
+        else:
+            R.ok("MCP create orchestrator job")
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        destructive_names = {"delete_clip", "delete_track", "overwrite_sequence"}
+        task_tools = {t.get("tool") for t in manifest.get("tasks", [])}
+        task_steps = {t.get("step") for t in manifest.get("tasks", [])}
+        if manifest.get("backup_sequence_id") is not None or (task_tools | task_steps) & destructive_names:
+            R.fail("MCP orchestrator job manifest safety", str(manifest))
+        elif str(manifest_path) in json.dumps(manifest.get("tasks", [])):
+            R.fail("MCP orchestrator job manifest path separation", "manifest path must not be reused as an export/caption/asset output placeholder")
+        else:
+            R.ok("MCP orchestrator job manifest safety")
+
+        qa_manifest_path = tmp / "orchestrator_jobs" / "sequence_qa.json"
+        qa_created = pam.handle("tools/call", {
+            "name": "premiere_agent_create_orchestrator_job",
+            "arguments": {"job_type": "sequence_qa", "sequence_id": "seq1", "output_path": str(qa_manifest_path)},
+        })
+        qa_manifest = json.loads(qa_manifest_path.read_text(encoding="utf-8")) if qa_manifest_path.exists() else {}
+        qa_live_writes = [t for t in qa_manifest.get("tasks", []) if t.get("side_effect") in {"write", "render", "backup"}]
+        if qa_created.get("isError") or qa_live_writes:
+            R.fail("MCP sequence QA manifest is read-only by default", str(qa_manifest))
+        else:
+            R.ok("MCP sequence QA manifest is read-only by default")
+
+        refused = pam.handle("tools/call", {
+            "name": "premiere_agent_create_orchestrator_job",
+            "arguments": {"job_type": "talking_head", "sequence_id": "seq1", "output_path": str(manifest_path)},
+        })
+        if not refused.get("isError") or "overwrite=true" not in refused["content"][0]["text"]:
+            R.fail("MCP orchestrator job overwrite refusal", str(refused))
+        else:
+            R.ok("MCP orchestrator job overwrite refusal")
+
+        overwritten = pam.handle("tools/call", {
+            "name": "premiere_agent_create_orchestrator_job",
+            "arguments": {"job_type": "talking_head", "sequence_id": "seq1", "output_path": str(manifest_path), "overwrite": True},
+        })
+        if overwritten.get("isError"):
+            R.fail("MCP orchestrator job overwrite=true", str(overwritten))
+        else:
+            R.ok("MCP orchestrator job overwrite=true")
+
+        verified = pam.handle("tools/call", {
+            "name": "premiere_agent_verify_orchestrator_job",
+            "arguments": {"manifest_path": str(manifest_path)},
+        })
+        verified_text = verified["content"][0]["text"]
+        if verified.get("isError") or '"ok": true' not in verified_text.lower():
+            R.fail("MCP verify orchestrator job", verified_text)
+        else:
+            R.ok("MCP verify orchestrator job")
+
+        motion_manifest_path = tmp / "orchestrator_jobs" / "motion_graphic.json"
+        motion_created = pam.handle("tools/call", {
+            "name": "premiere_agent_create_orchestrator_job",
+            "arguments": {"job_type": "motion_graphic", "sequence_id": "seq1", "output_path": str(motion_manifest_path)},
+        })
+        motion_manifest = json.loads(motion_manifest_path.read_text(encoding="utf-8")) if motion_manifest_path.exists() else {}
+        import_task = next((t for t in motion_manifest.get("tasks", []) if t.get("tool") == "premiere_agent_import_media"), None)
+        if motion_created.get("isError") or not import_task or not import_task.get("requires_backup") or not import_task.get("verification", {}).get("required"):
+            R.fail("MCP motion graphic manifest uses bounded import_media tool", str(motion_manifest))
+        else:
+            R.ok("MCP motion graphic manifest uses bounded import_media tool")
+
+        motion_verified = pam.handle("tools/call", {
+            "name": "premiere_agent_verify_orchestrator_job",
+            "arguments": {"manifest_path": str(motion_manifest_path)},
+        })
+        motion_verified_text = motion_verified["content"][0]["text"]
+        if motion_verified.get("isError") or '"ok": true' not in motion_verified_text.lower():
+            R.fail("MCP verify motion graphic orchestrator job", motion_verified_text)
+        else:
+            R.ok("MCP verify motion graphic orchestrator job")
+
+        motion_prompt = pam.handle("prompts/get", {"name": "premiere_orchestrator_motion_graphic_for_range", "arguments": {"sequence_id": "seq1"}})
+        motion_prompt_text = "\n".join(m["content"]["text"] for m in motion_prompt["messages"])
+        if "premiere_agent_import_media" not in motion_prompt_text:
+            R.fail("MCP motion graphic prompt references import_media", motion_prompt_text[:500])
+        else:
+            R.ok("MCP motion graphic prompt references import_media")
+    except Exception as e:
+        traceback.print_exc()
+        R.fail("Premiere Agent MCP orchestrator layer", f"{type(e).__name__}: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -1414,6 +1591,7 @@ def run_all(heavy: bool = False, keep_tmp: bool = False) -> Results:
         test_render_preview(R, tmp)
         test_social_package(R, tmp)
         test_mcp_starter_tools(R, tmp)
+        test_mcp_orchestrator_layer(R, tmp)
         test_parakeet_fallback(R, tmp)
 
         if heavy:

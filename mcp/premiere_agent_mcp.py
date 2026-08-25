@@ -25,6 +25,13 @@ from premiere_live_bridge import (  # type: ignore[import-not-found]
     live_bridge_protocol_spec,
     plan_live_premiere_job,
 )
+from orchestrator_schema import (  # type: ignore[import-not-found]
+    JOB_TYPES,
+    SAFETY_POLICY,
+    VERIFICATION_METHODS,
+    create_orchestrator_job,
+    verify_orchestrator_job,
+)
 
 SERVER_NAME = "premiere-agent"
 SERVER_VERSION = "0.1.0"
@@ -341,6 +348,28 @@ def live_bridge_import_captions(
     )
 
 
+def live_bridge_import_media(
+    sequence_id: str,
+    media_path: str,
+    *,
+    time_s: float | None = None,
+    track: str | None = None,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).import_media(
+        sequence_id,
+        media_path,
+        time_s=time_s,
+        track=track,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
 def live_bridge_queue_export(
     sequence_id: str,
     output_path: str,
@@ -363,6 +392,29 @@ def live_bridge_queue_export(
         confirm=confirm,
         dry_run=dry_run,
     )
+
+
+def create_orchestrator_job_tool(
+    job_type: str,
+    sequence_id: str,
+    output_path: str,
+    *,
+    requested_outputs: list[str] | None = None,
+    notes: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    return create_orchestrator_job(
+        job_type,
+        sequence_id,
+        output_path,
+        requested_outputs=requested_outputs,
+        notes=notes,
+        overwrite=overwrite,
+    )
+
+
+def verify_orchestrator_job_tool(manifest_path: str) -> dict[str, Any]:
+    return verify_orchestrator_job(manifest_path)
 
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -446,10 +498,305 @@ TOOLS: dict[str, dict[str, Any]] = {
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "caption_path": {"type": "string"}, "start_s": {"type": "number", "default": 0}, "caption_format": {"type": "string", "default": "subtitle"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "caption_path"]},
         "handler": lambda a: live_bridge_import_captions(a["sequence_id"], a["caption_path"], start_s=a.get("start_s", 0.0), caption_format=a.get("caption_format", "subtitle"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
+    "premiere_agent_import_media": {
+        "description": "Import a media file (e.g. a rendered motion graphic) into a live Premiere project/sequence at an optional time/track. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "media_path": {"type": "string"}, "time_s": {"type": "number"}, "track": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "media_path"]},
+        "handler": lambda a: live_bridge_import_media(a["sequence_id"], a["media_path"], time_s=a.get("time_s"), track=a.get("track"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
     "premiere_agent_queue_export": {
         "description": "Queue a live Premiere sequence/range export. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "output_path": {"type": "string"}, "range_start_s": {"type": "number"}, "range_end_s": {"type": "number"}, "preset": {"type": "string", "default": "match_source_h264"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "output_path"]},
         "handler": lambda a: live_bridge_queue_export(a["sequence_id"], a["output_path"], range_start_s=a.get("range_start_s"), range_end_s=a.get("range_end_s"), preset=a.get("preset", "match_source_h264"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_create_orchestrator_job": {
+        "description": "Write a JSON orchestrator job manifest (plan only; never touches Premiere). Claude Desktop reads this back to decide which bounded tools to call, in what order, with which safety gates.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "job_type": {"type": "string", "enum": JOB_TYPES},
+                "sequence_id": {"type": "string"},
+                "output_path": {"type": "string", "description": "Path where the JSON orchestrator manifest should be written; this is not a Premiere export path."},
+                "requested_outputs": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "string"},
+                "overwrite": {"type": "boolean", "default": False},
+            },
+            "required": ["job_type", "sequence_id", "output_path"],
+        },
+        "handler": lambda a: create_orchestrator_job_tool(
+            a["job_type"],
+            a["sequence_id"],
+            a["output_path"],
+            requested_outputs=a.get("requested_outputs"),
+            notes=a.get("notes"),
+            overwrite=a.get("overwrite", False),
+        ),
+    },
+    "premiere_agent_verify_orchestrator_job": {
+        "description": "Read-only check that an orchestrator job manifest requires a sequence backup first, lists no destructive actions, and has requires_backup + a verification placeholder on every live-write task.",
+        "inputSchema": {"type": "object", "properties": {"manifest_path": {"type": "string"}}, "required": ["manifest_path"]},
+        "handler": lambda a: verify_orchestrator_job_tool(a["manifest_path"]),
+    },
+}
+
+
+def _resource_text(data: Any) -> str:
+    if isinstance(data, str):
+        return data
+    return json.dumps(data, indent=2, sort_keys=True)
+
+
+def _safety_policy_resource() -> dict[str, Any]:
+    return {
+        "policy": SAFETY_POLICY,
+        "verification_required": VERIFICATION_METHODS,
+        "live_write_tools_require": ["confirm=true", "backup_sequence_id (for timeline-affecting writes)"],
+        "duplicate_sequence_first": "Every timeline-affecting write must be preceded by premiere_agent_duplicate_sequence(confirm=true) and must carry the returned backup_sequence_id on the write call.",
+        "verify_after_every_write": "Every write must be followed by a readback: premiere_agent_get_sequence_structure, premiere_agent_list_markers, premiere_agent_export_review_frames, or a rendered/exported file check.",
+        "destructive_operations": "Not supported by any exposed tool. delete_clip, delete_track, and overwrite_sequence are explicitly unsupported.",
+        "professional_fallback": "edl.json -> cut.xml/cut.fcpxml + master.srt remains the source-of-truth path if the live bridge is unavailable.",
+    }
+
+
+def _live_bridge_protocol_resource() -> dict[str, Any]:
+    return live_bridge_protocol_spec()
+
+
+def _orchestrator_contract_resource() -> dict[str, Any]:
+    return {
+        "roles": {
+            "orchestrator": "Claude Desktop (or another host agent) is the orchestrator. It decides what to do, sequences tool calls, and confirms intent with the user.",
+            "premiere_agent_mcp": "This MCP server is a bounded tool/resource/prompt surface. It performs only the specific action a tool call asks for; it never plans or chains actions on its own.",
+            "cep_uxp_bridge": "The CEP/UXP Premiere panel is a local transport only. It executes the single bridge action it is sent and returns the result; it does not decide what to do next.",
+        },
+        "non_negotiables": [
+            "The CEP/UXP panel must never become the decision-making orchestrator.",
+            "Live writes are dry-run by default; a write only executes with confirm=true.",
+            "Timeline-affecting writes require backup_sequence_id from premiere_agent_duplicate_sequence.",
+            "Every live write must be followed by verification: snapshot, marker readback, review frames/contact sheet, or a rendered/exported file check.",
+            "No destructive Premiere operations are exposed.",
+            "edl.json -> cut.xml/cut.fcpxml + master.srt remains the professional fallback/source-of-truth path.",
+        ],
+        "how_to_orchestrate": [
+            "Discover repeatable workflows via prompts/list and prompts/get (see config://premiere-agent/workflow-skills).",
+            "Read config://premiere-agent/safety-policy and config://premiere-agent/live-bridge-protocol before planning writes.",
+            "Optionally call premiere_agent_create_orchestrator_job to record a plan-only JSON manifest before touching Premiere.",
+            "Call bounded tools directly for every actual mutation; never assume a tool call implies any follow-up action.",
+        ],
+    }
+
+
+def _workflow_skills_resource() -> dict[str, Any]:
+    return {
+        "prompts": [
+            {
+                "name": name,
+                "description": spec["description"],
+                "arguments": [a["name"] for a in spec["arguments"]],
+            }
+            for name, spec in PROMPTS.items()
+        ],
+        "job_types": JOB_TYPES,
+        "manifest_tool": "premiere_agent_create_orchestrator_job",
+        "manifest_verify_tool": "premiere_agent_verify_orchestrator_job",
+        "note": "Prompts package a repeatable orchestration sequence for Claude Desktop; they do not perform any action themselves. Actual mutations always go through the bounded premiere_agent_* tools.",
+    }
+
+
+RESOURCES: dict[str, dict[str, Any]] = {
+    "config://premiere-agent/safety-policy": {
+        "name": "safety-policy",
+        "description": "Static safety policy: dry-run defaults, confirm/backup requirements, verification requirements, and the file-based fallback path.",
+        "mimeType": "application/json",
+        "handler": _safety_policy_resource,
+    },
+    "config://premiere-agent/live-bridge-protocol": {
+        "name": "live-bridge-protocol",
+        "description": "JSON-RPC protocol contract a CEP/UXP Premiere bridge implements: read/write/destructive action lists and write policy.",
+        "mimeType": "application/json",
+        "handler": _live_bridge_protocol_resource,
+    },
+    "config://premiere-agent/orchestrator-contract": {
+        "name": "orchestrator-contract",
+        "description": "Who is the orchestrator (Claude Desktop), what this MCP server is (bounded tool surface), and what the CEP/UXP panel is (local transport only).",
+        "mimeType": "application/json",
+        "handler": _orchestrator_contract_resource,
+    },
+    "config://premiere-agent/workflow-skills": {
+        "name": "workflow-skills",
+        "description": "Index of the repeatable orchestration prompts this server exposes, and the orchestrator job manifest tools.",
+        "mimeType": "application/json",
+        "handler": _workflow_skills_resource,
+    },
+}
+
+
+def _orchestrator_directives() -> str:
+    return (
+        "You are the orchestrator for this task. The premiere-agent MCP server is a bounded tool/resource/prompt "
+        "surface, not a decision-maker: it only performs the exact action each tool call asks for. The CEP/UXP "
+        "Premiere panel is a local transport only. Claude Desktop (you) must:\n"
+        "1. Call premiere_agent_verify_premiere_connection (read-only) to confirm the Premiere bridge is reachable "
+        "before doing anything else.\n"
+        "2. Call premiere_agent_get_sequence_structure (and premiere_agent_list_markers if relevant) to inspect the "
+        "active/target sequence.\n"
+        "3. State the exact project/sequence and the intended operation to the user and get explicit confirmation "
+        "before any write.\n"
+        "4. Call premiere_agent_duplicate_sequence with confirm=true to back up the sequence before any "
+        "timeline-affecting mutation, and capture the returned backup_sequence_id.\n"
+        "5. Perform only the specific bounded tool calls listed for this job, passing backup_sequence_id and "
+        "confirm=true on every live write.\n"
+        "6. After every live write, call a verification tool (premiere_agent_get_sequence_structure, "
+        "premiere_agent_list_markers, premiere_agent_export_review_frames, or check the rendered/exported file) to "
+        "confirm the write actually happened.\n"
+        "7. Report back exact sequence ids, marker ids, file paths, time ranges, and the verification evidence you "
+        "collected. Never claim success without it.\n"
+        "8. If premiere_agent_verify_premiere_connection or any bridge call fails or the bridge is unavailable, fall "
+        "back to the file-based path: edl.json -> cut.xml/cut.fcpxml + master.srt."
+    )
+
+
+def _prompt_message(text: str) -> dict[str, Any]:
+    return {"role": "user", "content": {"type": "text", "text": text}}
+
+
+def _talking_head_prompt(args: dict[str, Any]) -> list[dict[str, Any]]:
+    sequence_id = args.get("sequence_id") or "<TARGET_SEQUENCE_ID>"
+    notes = args.get("notes") or ""
+    text = (
+        f"Task: run a talking-head editorial pass on Premiere sequence {sequence_id}.\n\n"
+        + _orchestrator_directives()
+        + "\n\nJob-specific bounded tool sequence:\n"
+        "- premiere_agent_verify_premiere_connection\n"
+        "- premiere_agent_get_sequence_structure(sequence_id)\n"
+        "- premiere_agent_duplicate_sequence(sequence_id, confirm=true) -> backup_sequence_id\n"
+        "- premiere_agent_add_editorial_markers(sequence_id, notes, backup_sequence_id, confirm=true) for filler/retake/review notes\n"
+        "- premiere_agent_import_captions(sequence_id, caption_path, backup_sequence_id, confirm=true) if captions are requested\n"
+        "- premiere_agent_export_review_frames(sequence_id, output_dir, backup_sequence_id, confirm=true) to produce a contact sheet\n"
+        "- premiere_agent_queue_export(sequence_id, output_path, backup_sequence_id, confirm=true) for the final deliverable\n"
+        "- premiere_agent_list_markers(sequence_id) and/or premiere_agent_get_sequence_structure(sequence_id) to verify readback\n\n"
+        "Optionally call premiere_agent_create_orchestrator_job(job_type=\"talking_head\", ...) first to record the plan as a manifest.\n"
+        f"Additional notes from the user: {notes}"
+    )
+    return [_prompt_message(text)]
+
+
+def _batch_export_prompt(args: dict[str, Any]) -> list[dict[str, Any]]:
+    sequence_id = args.get("sequence_id") or "<TARGET_SEQUENCE_ID>"
+    output_dir = args.get("output_dir") or "<OUTPUT_DIR>"
+    text = (
+        f"Task: batch-export shorts/ranges from Premiere sequence {sequence_id} into {output_dir}.\n\n"
+        + _orchestrator_directives()
+        + "\n\nJob-specific bounded tool sequence:\n"
+        "- premiere_agent_verify_premiere_connection\n"
+        "- premiere_agent_get_sequence_structure(sequence_id)\n"
+        "- premiere_agent_batch_export_plan(items, output_dir) to produce a naming-safe export manifest\n"
+        "- premiere_agent_duplicate_sequence(sequence_id, confirm=true) -> backup_sequence_id\n"
+        "- premiere_agent_queue_export(sequence_id, output_path, backup_sequence_id, confirm=true) for each planned item\n"
+        "- verify every exported file exists at its reported output path before reporting success\n\n"
+        "Optionally call premiere_agent_create_orchestrator_job(job_type=\"batch_export\", ...) first to record the plan as a manifest."
+    )
+    return [_prompt_message(text)]
+
+
+def _motion_graphic_prompt(args: dict[str, Any]) -> list[dict[str, Any]]:
+    sequence_id = args.get("sequence_id") or "<TARGET_SEQUENCE_ID>"
+    range_start_s = args.get("range_start_s", "<RANGE_START_S>")
+    range_end_s = args.get("range_end_s", "<RANGE_END_S>")
+    text = (
+        f"Task: plan/produce a motion graphic for sequence {sequence_id}, range {range_start_s}s-{range_end_s}s.\n\n"
+        + _orchestrator_directives()
+        + "\n\nJob-specific bounded tool sequence:\n"
+        "- premiere_agent_verify_premiere_connection\n"
+        "- premiere_agent_get_sequence_structure(sequence_id)\n"
+        "- premiere_agent_duplicate_sequence(sequence_id, confirm=true) -> backup_sequence_id\n"
+        "- premiere_agent_export_review_frames(sequence_id, output_dir, range_start_s, range_end_s, backup_sequence_id, confirm=true) "
+        "for reference stills of the target range\n"
+        "- render the graphic asset offline (Remotion/Hyperframes/Manim/etc); this is not a bounded Premiere tool call\n"
+        "- premiere_agent_import_media(sequence_id, media_path, time_s, track, backup_sequence_id, confirm=true) to bring the "
+        "rendered graphic into the sequence at the target range\n"
+        "- verify with premiere_agent_get_sequence_structure/premiere_agent_export_review_frames that the graphic is present at "
+        "the intended range\n\n"
+        "Optionally call premiere_agent_create_orchestrator_job(job_type=\"motion_graphic\", ...) first to record the plan as a manifest."
+    )
+    return [_prompt_message(text)]
+
+
+def _caption_pass_prompt(args: dict[str, Any]) -> list[dict[str, Any]]:
+    sequence_id = args.get("sequence_id") or "<TARGET_SEQUENCE_ID>"
+    caption_path = args.get("caption_path") or "<CAPTION_PATH.srt>"
+    text = (
+        f"Task: import captions from {caption_path} into Premiere sequence {sequence_id}.\n\n"
+        + _orchestrator_directives()
+        + "\n\nJob-specific bounded tool sequence:\n"
+        "- premiere_agent_verify_premiere_connection\n"
+        "- premiere_agent_get_sequence_structure(sequence_id)\n"
+        "- premiere_agent_duplicate_sequence(sequence_id, confirm=true) -> backup_sequence_id\n"
+        "- premiere_agent_import_captions(sequence_id, caption_path, backup_sequence_id, confirm=true)\n"
+        "- premiere_agent_export_review_frames(sequence_id, output_dir, backup_sequence_id, confirm=true) to visually confirm "
+        "burned-in/attached captions\n"
+        "- premiere_agent_list_markers/premiere_agent_get_sequence_structure to verify readback\n\n"
+        "Optionally call premiere_agent_create_orchestrator_job(job_type=\"caption_pass\", ...) first to record the plan as a manifest."
+    )
+    return [_prompt_message(text)]
+
+
+def _sequence_qa_prompt(args: dict[str, Any]) -> list[dict[str, Any]]:
+    sequence_id = args.get("sequence_id") or "<TARGET_SEQUENCE_ID>"
+    text = (
+        f"Task: run a read-only QA pass on Premiere sequence {sequence_id}. This job performs no timeline mutation.\n\n"
+        + _orchestrator_directives()
+        + "\n\nJob-specific bounded tool sequence:\n"
+        "- premiere_agent_verify_premiere_connection\n"
+        "- premiere_agent_get_sequence_structure(sequence_id)\n"
+        "- premiere_agent_list_markers(sequence_id)\n"
+        "- premiere_agent_export_review_frames(sequence_id, output_dir, backup_sequence_id, confirm=true) for an optional spot-check "
+        "contact sheet (still a live write: duplicate the sequence first if you use it)\n"
+        "- report findings only; do not mutate the sequence in this job\n\n"
+        "Optionally call premiere_agent_create_orchestrator_job(job_type=\"sequence_qa\", ...) first to record the plan as a manifest."
+    )
+    return [_prompt_message(text)]
+
+
+PROMPTS: dict[str, dict[str, Any]] = {
+    "premiere_orchestrator_talking_head": {
+        "description": "Orchestrate a talking-head editorial pass: inspect, backup, editorial markers, captions, review frames, final export.",
+        "arguments": [
+            {"name": "sequence_id", "description": "Target Premiere sequence id, if already known.", "required": False},
+            {"name": "notes", "description": "Any extra editorial notes/instructions from the user.", "required": False},
+        ],
+        "handler": _talking_head_prompt,
+    },
+    "premiere_orchestrator_batch_export": {
+        "description": "Orchestrate a batch export of shorts/ranges from a sequence into an output directory.",
+        "arguments": [
+            {"name": "sequence_id", "description": "Target Premiere sequence id, if already known.", "required": False},
+            {"name": "output_dir", "description": "Directory to export batch items into.", "required": False},
+        ],
+        "handler": _batch_export_prompt,
+    },
+    "premiere_orchestrator_motion_graphic_for_range": {
+        "description": "Orchestrate producing a motion graphic for a specific in/out range on a sequence.",
+        "arguments": [
+            {"name": "sequence_id", "description": "Target Premiere sequence id, if already known.", "required": False},
+            {"name": "range_start_s", "description": "Range start in seconds.", "required": False},
+            {"name": "range_end_s", "description": "Range end in seconds.", "required": False},
+        ],
+        "handler": _motion_graphic_prompt,
+    },
+    "premiere_orchestrator_caption_pass": {
+        "description": "Orchestrate importing an SRT/VTT caption file into a sequence and verifying it visually.",
+        "arguments": [
+            {"name": "sequence_id", "description": "Target Premiere sequence id, if already known.", "required": False},
+            {"name": "caption_path", "description": "Path to the .srt/.vtt caption file.", "required": False},
+        ],
+        "handler": _caption_pass_prompt,
+    },
+    "premiere_orchestrator_sequence_qa": {
+        "description": "Orchestrate a read-only QA pass over a sequence: structure, markers, optional spot-check frames.",
+        "arguments": [
+            {"name": "sequence_id", "description": "Target Premiere sequence id, if already known.", "required": False},
+        ],
+        "handler": _sequence_qa_prompt,
     },
 }
 
@@ -460,7 +807,7 @@ def handle(method: str, params: dict[str, Any] | None) -> Any:
         return {
             "protocolVersion": params.get("protocolVersion", "2024-11-05"),
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-            "capabilities": {"tools": {}},
+            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
         }
     if method == "notifications/initialized":
         return None
@@ -475,6 +822,34 @@ def handle(method: str, params: dict[str, Any] | None) -> Any:
             return _json_text(TOOLS[name]["handler"](args))
         except Exception as e:
             return {"isError": True, "content": [{"type": "text", "text": f"{type(e).__name__}: {e}\n{traceback.format_exc()}"}]}
+    if method == "resources/list":
+        return {
+            "resources": [
+                {"uri": uri, "name": spec["name"], "description": spec["description"], "mimeType": spec["mimeType"]}
+                for uri, spec in RESOURCES.items()
+            ]
+        }
+    if method == "resources/read":
+        uri = params.get("uri")
+        if uri not in RESOURCES:
+            raise McpError(-32602, f"unknown resource: {uri}")
+        spec = RESOURCES[uri]
+        text = _resource_text(spec["handler"]())
+        return {"contents": [{"uri": uri, "mimeType": spec["mimeType"], "text": text}]}
+    if method == "prompts/list":
+        return {
+            "prompts": [
+                {"name": name, "description": spec["description"], "arguments": spec["arguments"]}
+                for name, spec in PROMPTS.items()
+            ]
+        }
+    if method == "prompts/get":
+        name = params.get("name")
+        if name not in PROMPTS:
+            raise McpError(-32602, f"unknown prompt: {name}")
+        spec = PROMPTS[name]
+        args = params.get("arguments") or {}
+        return {"description": spec["description"], "messages": spec["handler"](args)}
     raise McpError(-32601, f"method not found: {method}")
 
 

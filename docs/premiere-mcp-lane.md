@@ -42,7 +42,50 @@ It exposes safe tools plus dry-run live-bridge planning tools:
 | `premiere_agent_add_editorial_markers` | write, dry-run default | Batch-add AI editorial markers for filler, retakes, in-clip editor notes, or review regions; requires `confirm=true` and `backup_sequence_id`. |
 | `premiere_agent_export_review_frames` | render/file write, dry-run default | Export evenly spaced review frames from a live sequence. CEP first tries stills; on Premiere builds with no still preset it may return short H.264 proof clips, which the local side can frame-extract into a contact sheet. |
 | `premiere_agent_import_captions` | write, dry-run default | Import an `.srt`/`.vtt` caption file and scaffold caption-track creation where Premiere exposes it. |
+| `premiere_agent_import_media` | write, dry-run default | Import a media file (e.g. a rendered motion graphic) at an optional time/track; requires `confirm=true` and `backup_sequence_id`. |
 | `premiere_agent_queue_export` | render/write, dry-run default | Queue a sequence/range export; requires `confirm=true` and `backup_sequence_id`. |
+
+## Claude Desktop orchestrator integration
+
+Claude Desktop (or any other host agent) is the orchestrator. This MCP server never plans multi-step work on its own — it only performs the exact action a tool call asks for, one call at a time. The CEP/UXP bridge stays a local transport: it executes the single bridge action it is sent and returns the result, and never decides what to do next. Nothing in this integration turns the Premiere panel or the low-level MCP server into an autonomous agent.
+
+Three MCP primitives make this concrete:
+
+- **MCP tools** perform bounded actions — the existing `premiere_agent_*` tools above are the only things that ever touch Premiere or the filesystem.
+- **MCP resources** are read-only, static policy/contract documents the host reads before planning a job:
+  - `config://premiere-agent/safety-policy` — dry-run defaults, confirm/backup requirements, verification requirements, and the file-based fallback.
+  - `config://premiere-agent/live-bridge-protocol` — the JSON-RPC contract a CEP/UXP bridge implements (same content as `premiere_agent_live_bridge_protocol_spec`).
+  - `config://premiere-agent/orchestrator-contract` — who the orchestrator is, what this MCP server is, and what the CEP/UXP panel is, plus the non-negotiable safety rules.
+  - `config://premiere-agent/workflow-skills` — an index of the orchestration prompts below and the manifest tools.
+  - Resources are static and read-only: they never include project paths, media names, or live Premiere state.
+- **MCP prompts** package a repeatable orchestration sequence as instructions for the host model — they do not execute anything themselves:
+  - `premiere_orchestrator_talking_head`
+  - `premiere_orchestrator_batch_export`
+  - `premiere_orchestrator_motion_graphic_for_range`
+  - `premiere_orchestrator_caption_pass`
+  - `premiere_orchestrator_sequence_qa`
+
+  Every prompt tells the host model to: verify the Premiere connection read-only; inspect the active/target sequence; confirm the project/sequence and intended operation with the user before any write; duplicate/backup the sequence before timeline mutation; call only the specific bounded tools listed; verify readback after every write; report exact sequence ids, marker ids, file paths, ranges, and verification evidence; and fall back to `edl.json -> cut.xml/cut.fcpxml + master.srt` if the live bridge is unavailable.
+
+There is also a lightweight, file-only orchestrator job manifest (`mcp/orchestrator_schema.py`):
+
+| Tool | Side effect | Purpose |
+| --- | --- | --- |
+| `premiere_agent_create_orchestrator_job` | writes JSON manifest only | Record a plan (`job_type`, `target_sequence_id`, `backup_sequence_id: null`, `status: "planned"`, `tasks`, `policy`, `verification_required`) before touching Premiere. Refuses to overwrite an existing manifest unless `overwrite=true`. |
+| `premiere_agent_verify_orchestrator_job` | read-only | Check that a manifest requires a sequence backup first, lists no destructive actions, and has `requires_backup: true` plus a verification placeholder on every live-write task. |
+
+`premiere_agent_create_orchestrator_job` never calls the live bridge — it only writes a JSON file describing the plan the orchestrator intends to execute via the bounded tools.
+
+### Sample Claude Desktop workflow
+
+1. Invoke prompt `premiere_orchestrator_talking_head` with `sequence_id`.
+2. Call `premiere_agent_verify_premiere_connection` (read-only).
+3. Call `premiere_agent_get_sequence_structure` to inspect the target sequence.
+4. Call `premiere_agent_create_orchestrator_job` to record the plan as a manifest (`backup_sequence_id: null`, `status: "planned"`).
+5. Call `premiere_agent_duplicate_sequence(confirm=true)` and capture the returned `backup_sequence_id`.
+6. Perform the bounded action (e.g. `premiere_agent_add_editorial_markers(confirm=true, backup_sequence_id=...)`).
+7. Verify readback with `premiere_agent_list_markers` or `premiere_agent_get_sequence_structure`.
+8. Report exact sequence/marker ids, file paths, ranges, and the verification evidence back to the user.
 
 ## Hermes registration
 
