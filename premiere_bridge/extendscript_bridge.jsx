@@ -2420,7 +2420,12 @@ function paOverwriteFromSource(raw) {
     var adjustedPos = pos - inTicks;
     var clamped = false;
     if (adjustedPos < 0) { adjustedPos = 0; clamped = true; }
-    seq.overwriteClip(item, adjustedPos, vTrack, aTrack);
+    // Time.ticks is a big-integer string, not a native JS number (see
+    // paSecondsToTicks/paTicksToSeconds elsewhere in this file) -- passing a
+    // plain JS Number back into overwriteClip here silently produced the
+    // wrong position (Premiere appears to mis-marshal it), confirmed live.
+    // Must re-stringify before calling back into the native API.
+    seq.overwriteClip(item, String(Math.round(adjustedPos)), vTrack, aTrack);
     var result = { ok: true, overwritten: true, item: String(item.name || ''), at_seconds: paTicksToSeconds(pos) };
     if (clamped) result.note = 'Source in-point exceeded the target position; overwrite position could not be fully compensated and was clamped to 0. Verify placement with get_sequence_structure.';
     return paJson(result);
