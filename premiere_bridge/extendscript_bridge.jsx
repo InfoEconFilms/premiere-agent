@@ -168,6 +168,56 @@ function paRequireBackup(args) {
   return null;
 }
 
+function paFindProjectItem(nodeIdOrName, rootItem) {
+  if (!paHasApp()) return null;
+  if (!rootItem) rootItem = app.project.rootItem;
+  if (!rootItem || !rootItem.children) return null;
+  for (var i = 0; i < rootItem.children.numItems; i += 1) {
+    var item = rootItem.children[i];
+    if (!item) continue;
+    if (String(item.nodeId || '') === nodeIdOrName || String(item.name || '') === nodeIdOrName) return item;
+    if (item.type === 2) { // Bin
+      var found = paFindProjectItem(nodeIdOrName, item);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Import puts the new item's ProjectItem name at the file's display name (usually
+// the filename with extension). Some Premiere builds strip the extension instead,
+// so try both before giving up.
+function paFindImportedProjectItem(filePath) {
+  var raw = String(filePath || '');
+  var slashAt = raw.lastIndexOf('/');
+  var backslashAt = raw.lastIndexOf('\\');
+  var cut = slashAt > backslashAt ? slashAt : backslashAt;
+  var fullName = decodeURI(cut >= 0 ? raw.substring(cut + 1) : raw);
+  var dot = fullName.lastIndexOf('.');
+  var baseName = dot > 0 ? fullName.substring(0, dot) : fullName;
+  return paFindProjectItem(fullName) || paFindProjectItem(baseName);
+}
+
+// Sequence.CAPTION_FORMAT_* are static constants on the Sequence class exposed by
+// Premiere's ExtendScript engine (added alongside scriptable caption-track
+// creation). Default to subtitle (SRT/VTT) since that is what import_captions is
+// documented to accept.
+function paCaptionFormatConstant(name) {
+  var key = String(name || 'subtitle').toLowerCase();
+  try {
+    if (typeof Sequence === 'undefined') return null;
+    if (key === '608') return Sequence.CAPTION_FORMAT_608;
+    if (key === '708') return Sequence.CAPTION_FORMAT_708;
+    if (key === 'teletext') return Sequence.CAPTION_FORMAT_TELETEXT;
+    if (key === 'ebu' || key === 'open_ebu') return Sequence.CAPTION_FORMAT_OPEN_EBU;
+    if (key === 'op42') return Sequence.CAPTION_FORMAT_OP42;
+    if (key === 'op47') return Sequence.CAPTION_FORMAT_OP47;
+    return Sequence.CAPTION_FORMAT_SUBTITLE;
+  } catch (err) {
+    return null;
+  }
+}
+
 function paStatus(raw) {
   var seq = paActiveSequence();
   return paJson({
@@ -816,28 +866,60 @@ function paImportCaptions(raw) {
   if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
   var path = String(args.caption_path || '');
   if (!path) return paJson({ ok: false, error: 'caption_path required' });
+  var startS = Number(args.start_s || 0);
+  var formatName = String(args.caption_format || 'subtitle');
+
   var imported = false;
-  var captionTrackCreated = false;
-  var note = '';
   try { imported = !!app.project.importFiles([path], true, app.project.rootItem, false); }
   catch (importErr) { return paJson({ ok: false, error: String(importErr) }); }
-  try {
-    if (seq.createCaptionTrack) {
-      note = 'Caption file imported; createCaptionTrack needs the imported ProjectItem and remains version-specific in this scaffold.';
-    } else {
-      note = 'Caption file imported; this Premiere scripting build did not expose createCaptionTrack.';
+  if (!imported) {
+    return paJson({
+      ok: false,
+      sequence_id: paSequenceId(seq),
+      imported: false,
+      caption_track_created: false,
+      caption_path: path,
+      error: 'Premiere rejected the caption file import',
+      verification: { kind: 'premiere_caption_import', mutates_project: false, backup_sequence_id: args.backup_sequence_id }
+    });
+  }
+
+  var captionTrackCreated = false;
+  var note = '';
+  var item = null;
+  try { item = paFindImportedProjectItem(path); }
+  catch (findErr) { note = 'Imported item lookup failed: ' + String(findErr); }
+
+  if (!item) {
+    note = note || 'Caption file imported into the project bin, but the new ProjectItem could not be located by name, so no caption track was created.';
+  } else if (!seq.createCaptionTrack) {
+    note = 'Caption file imported; this Premiere scripting build does not expose Sequence.createCaptionTrack, so no caption track was created.';
+  } else {
+    var formatConst = paCaptionFormatConstant(formatName);
+    try {
+      var trackResult = (formatConst === null || formatConst === undefined)
+        ? seq.createCaptionTrack(item, startS)
+        : seq.createCaptionTrack(item, startS, formatConst);
+      captionTrackCreated = !!trackResult;
+      note = captionTrackCreated
+        ? 'Caption track created from ' + item.name + ' at ' + startS + 's.'
+        : 'Premiere accepted the createCaptionTrack call but returned a falsy result; verify the sequence in the UI.';
+    } catch (captionErr) {
+      note = 'createCaptionTrack threw: ' + String(captionErr);
     }
-  } catch (captionErr) { note = String(captionErr); }
+  }
+
   return paJson({
     ok: imported,
     sequence_id: paSequenceId(seq),
     imported: imported,
     caption_track_created: captionTrackCreated,
+    caption_item_name: item ? String(item.name || '') : null,
     caption_path: path,
-    start_s: Number(args.start_s || 0),
-    caption_format: String(args.caption_format || 'subtitle'),
+    start_s: startS,
+    caption_format: formatName,
     note: note,
-    verification: { kind: 'premiere_caption_import_scaffold', mutates_project: true, backup_sequence_id: args.backup_sequence_id }
+    verification: { kind: 'premiere_caption_import', mutates_project: true, backup_sequence_id: args.backup_sequence_id, render_verified: false, verification_scope: 'Premiere accepted the caption-track creation call; verify playback or exported frames before delivery.' }
   });
 }
 
