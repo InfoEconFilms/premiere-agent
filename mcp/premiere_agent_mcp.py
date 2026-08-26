@@ -258,6 +258,56 @@ def live_bridge_duplicate_sequence(
     )
 
 
+def live_bridge_move_clip(
+    sequence_id: str,
+    track_type: str,
+    from_track_index: int,
+    clip_index: int,
+    to_track_index: int,
+    *,
+    start_s: float | None = None,
+    remove_original: bool = False,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).move_clip(
+        sequence_id,
+        track_type,
+        from_track_index,
+        clip_index,
+        to_track_index,
+        start_s=start_s,
+        remove_original=remove_original,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_remove_clip(
+    sequence_id: str,
+    track_type: str,
+    track_index: int,
+    clip_index: int,
+    *,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).remove_clip(
+        sequence_id,
+        track_type,
+        track_index,
+        clip_index,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
 def live_bridge_add_marker(
     sequence_id: str,
     time_s: float,
@@ -477,6 +527,16 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Duplicate/backup a live Premiere sequence. Requires confirm=true for any non-dry-run write.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "backup_name": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
         "handler": lambda a: live_bridge_duplicate_sequence(a["sequence_id"], a.get("backup_name"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_move_clip": {
+        "description": "Copy a clip onto a different track (e.g. onto a separate camera track for multicam layout) via Track.insertClip. By default the original is left in place (remove_original=false) since TrackItem removal is unproven on this Premiere build; only set remove_original=true after confirming the copy looks correct. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "from_track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "to_track_index": {"type": "integer"}, "start_s": {"type": "number"}, "remove_original": {"type": "boolean", "default": False}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "from_track_index", "clip_index", "to_track_index"]},
+        "handler": lambda a: live_bridge_move_clip(a["sequence_id"], a["track_type"], a["from_track_index"], a["clip_index"], a["to_track_index"], start_s=a.get("start_s"), remove_original=a.get("remove_original", False), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_remove_clip": {
+        "description": "Remove a single clip from a track via TrackItem.remove() (undocumented ExtendScript API, unproven across Premiere builds). Use to clean up a redundant copy left behind by move_clip. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index"]},
+        "handler": lambda a: live_bridge_remove_clip(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_add_marker": {
         "description": "Add a marker to a live Premiere sequence. Requires confirm=true and backup_sequence_id.",

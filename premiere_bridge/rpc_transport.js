@@ -32,7 +32,9 @@
     import_media: 'paImportMedia',
     queue_export: 'paQueueExport',
     apply_basic_lumetri: 'paApplyBasicLumetri',
-    set_clip_transform: 'paSetClipTransform'
+    set_clip_transform: 'paSetClipTransform',
+    move_clip: 'paMoveClip',
+    remove_clip: 'paRemoveClip'
   };
 
   function jsonRpcError(id, code, message) {

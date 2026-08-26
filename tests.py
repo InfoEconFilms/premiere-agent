@@ -971,6 +971,26 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge marker mutation", str(marker))
         else:
             R.ok("Premiere bridge marker mutation")
+        moved = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 33, "method": "move_clip", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "from_track_index": 0, "clip_index": 1, "to_track_index": 1}})
+        if not moved or not moved.get("result", {}).get("ok"):
+            R.fail("Premiere bridge move clip", str(moved))
+        else:
+            R.ok("Premiere bridge move clip")
+        moved_no_backup = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 34, "method": "move_clip", "params": {"sequence_id": "seq_main", "track_type": "video", "from_track_index": 0, "clip_index": 1, "to_track_index": 1}})
+        if not moved_no_backup or not moved_no_backup.get("error"):
+            R.fail("Premiere bridge move clip backup enforcement", str(moved_no_backup))
+        else:
+            R.ok("Premiere bridge move clip backup enforcement")
+        removed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 35, "method": "remove_clip", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "track_index": 0, "clip_index": 1}})
+        if not removed or not removed.get("result", {}).get("ok"):
+            R.fail("Premiere bridge remove clip", str(removed))
+        else:
+            R.ok("Premiere bridge remove clip")
+        removed_no_backup = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 36, "method": "remove_clip", "params": {"sequence_id": "seq_main", "track_type": "video", "track_index": 0, "clip_index": 1}})
+        if not removed_no_backup or not removed_no_backup.get("error"):
+            R.fail("Premiere bridge remove clip backup enforcement", str(removed_no_backup))
+        else:
+            R.ok("Premiere bridge remove clip backup enforcement")
         listed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 31, "method": "list_markers", "params": {"sequence_id": "seq_main"}})
         if not listed or listed.get("result", {}).get("marker_count") != 1 or listed.get("result", {}).get("verification", {}).get("mutates_project") is not False:
             R.fail("Premiere bridge marker listing", str(listed))

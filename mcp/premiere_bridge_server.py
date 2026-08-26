@@ -146,6 +146,47 @@ class MockPremiereBackend:
             "message": "Backup sequence created before live mutation.",
         }
 
+    def move_clip(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
+        _require_backup(params)
+        track_type = str(params.get("track_type") or "video")
+        from_track_index = params.get("from_track_index")
+        to_track_index = params.get("to_track_index")
+        clip_index = params.get("clip_index")
+        if from_track_index is None or to_track_index is None or clip_index is None:
+            raise JsonRpcError(-32602, "from_track_index, to_track_index, and clip_index are required")
+        return {
+            "ok": True,
+            "sequence_id": seq["id"],
+            "clip_name": f"mock_clip_{clip_index}",
+            "track_type": track_type,
+            "from_track_index": int(from_track_index),
+            "to_track_index": int(to_track_index),
+            "start_s": params.get("start_s"),
+            "remove_attempted": bool(params.get("remove_original")),
+            "original_removed": bool(params.get("remove_original")),
+            "remove_error": None,
+            "note": "Mock backend always succeeds; live behavior depends on Premiere's TrackItem removal support.",
+        }
+
+    def remove_clip(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
+        _require_backup(params)
+        track_type = str(params.get("track_type") or "video")
+        track_index = params.get("track_index")
+        clip_index = params.get("clip_index")
+        if track_index is None or clip_index is None:
+            raise JsonRpcError(-32602, "track_index and clip_index are required")
+        return {
+            "ok": True,
+            "sequence_id": seq["id"],
+            "clip_name": f"mock_clip_{clip_index}",
+            "track_type": track_type,
+            "track_index": int(track_index),
+            "clip_index": int(clip_index),
+            "note": "Mock backend always succeeds; live behavior depends on Premiere's TrackItem removal support.",
+        }
+
     def add_marker(self, params: dict[str, Any]) -> dict[str, Any]:
         seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
         _require_backup(params)

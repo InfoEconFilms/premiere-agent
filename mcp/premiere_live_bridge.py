@@ -256,6 +256,58 @@ class PremiereLiveBridge:
         }
         return self._request(BridgeRequest("import_captions", payload, dry_run=dry_run)).to_dict()
 
+    def move_clip(
+        self,
+        sequence_id: str,
+        track_type: str,
+        from_track_index: int,
+        clip_index: int,
+        to_track_index: int,
+        *,
+        start_s: float | None = None,
+        remove_original: bool = False,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("move_clip", confirm)
+            _require_backup("move_clip", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "track_type": track_type,
+            "from_track_index": int(from_track_index),
+            "to_track_index": int(to_track_index),
+            "clip_index": int(clip_index),
+            "start_s": start_s,
+            "remove_original": bool(remove_original),
+        }
+        return self._request(BridgeRequest("move_clip", payload, dry_run=dry_run)).to_dict()
+
+    def remove_clip(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        *,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("remove_clip", confirm)
+            _require_backup("remove_clip", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id,
+            "backup_sequence_id": backup_sequence_id,
+            "track_type": track_type,
+            "track_index": int(track_index),
+            "clip_index": int(clip_index),
+        }
+        return self._request(BridgeRequest("remove_clip", payload, dry_run=dry_run)).to_dict()
+
     def import_media(
         self,
         sequence_id: str,

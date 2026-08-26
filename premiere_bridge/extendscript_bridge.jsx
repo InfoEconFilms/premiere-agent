@@ -1027,3 +1027,138 @@ function paSetClipTransform(raw) {
   if (backupErr) return paJson(backupErr);
   return paJson({ ok: false, unsupported: true, requested_transform: args, message: 'Transform control requires stable clip ids from snapshot_sequence and component traversal.' });
 }
+
+function paRemoveClip(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var trackType = String(args.track_type || 'video').toLowerCase();
+  var trackIndex = Number(args.track_index);
+  var clipIndex = Number(args.clip_index);
+  if (!isFinite(trackIndex) || !isFinite(clipIndex)) {
+    return paJson({ ok: false, error: 'track_index and clip_index are required numbers' });
+  }
+  var tracks = (trackType === 'audio') ? seq.audioTracks : seq.videoTracks;
+  if (!tracks) return paJson({ ok: false, error: 'Track collection unavailable for track_type ' + trackType });
+  var track = null;
+  try { track = tracks[trackIndex]; } catch (e1) {}
+  if (!track) return paJson({ ok: false, error: 'track_index out of range', track_index: trackIndex });
+  var clip = null;
+  try { clip = track.clips[clipIndex]; } catch (e2) {}
+  if (!clip) return paJson({ ok: false, error: 'clip_index out of range', clip_index: clipIndex });
+  var clipName = String(clip.name || '');
+  if (typeof clip.remove !== 'function') {
+    return paJson({ ok: false, unsupported: true, message: 'TrackItem.remove is not exposed to ExtendScript on this Premiere build.', clip_name: clipName });
+  }
+  try {
+    // TrackItem.remove(rippleEdit, alignToVideo): boolean. Pass rippleEdit=false
+    // so this only lifts the clip (leaves a gap) rather than shifting every
+    // later clip on the track — a plain removal, not a ripple delete.
+    clip.remove(false, false);
+    return paJson({
+      ok: true,
+      sequence_id: paSequenceId(seq),
+      clip_name: clipName,
+      track_type: trackType,
+      track_index: trackIndex,
+      clip_index: clipIndex,
+      note: 'Clip removed from the track.'
+    });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err), clip_name: clipName });
+  }
+}
+
+function paMoveClip(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var trackType = String(args.track_type || 'video').toLowerCase();
+  var fromIndex = Number(args.from_track_index);
+  var toIndex = Number(args.to_track_index);
+  var clipIndex = Number(args.clip_index);
+  if (!isFinite(fromIndex) || !isFinite(toIndex) || !isFinite(clipIndex)) {
+    return paJson({ ok: false, error: 'from_track_index, to_track_index, and clip_index are required numbers' });
+  }
+  var tracks = (trackType === 'audio') ? seq.audioTracks : seq.videoTracks;
+  if (!tracks) return paJson({ ok: false, error: 'Track collection unavailable for track_type ' + trackType });
+  var fromTrack = null;
+  var toTrack = null;
+  try { fromTrack = tracks[fromIndex]; } catch (e1) {}
+  try { toTrack = tracks[toIndex]; } catch (e2) {}
+  if (!fromTrack) return paJson({ ok: false, error: 'from_track_index out of range', from_track_index: fromIndex });
+  if (!toTrack) return paJson({ ok: false, error: 'to_track_index out of range', to_track_index: toIndex });
+  if (typeof toTrack.insertClip !== 'function') {
+    return paJson({ ok: false, unsupported: true, message: 'This Premiere version did not expose Track.insertClip to ExtendScript.' });
+  }
+  var clip = null;
+  try { clip = fromTrack.clips[clipIndex]; } catch (e3) {}
+  if (!clip) return paJson({ ok: false, error: 'clip_index out of range on from_track_index', clip_index: clipIndex });
+  var clipName = String(clip.name || '');
+  // Track.insertClip's documented signature takes a ProjectItem, not a
+  // TrackItem. An earlier version of this function tried passing the
+  // TrackItem directly (reasoning a try/catch would safely fall back if
+  // rejected) and it crashed the entire Premiere process instead of throwing
+  // a catchable error — a try/catch cannot protect against a native crash.
+  // Never pass anything but clip.projectItem here.
+  var projectItem = null;
+  try { projectItem = clip.projectItem; } catch (piErr) {}
+  if (!projectItem) {
+    return paJson({ ok: false, error: 'Could not read clip.projectItem; refusing to call insertClip with an unproven argument type', clip_name: clipName });
+  }
+  var originalStartS = null;
+  try { if (clip.start && clip.start.seconds !== undefined) originalStartS = Number(clip.start.seconds); } catch (e4) {}
+  var targetStartS = (args.start_s !== undefined && args.start_s !== null) ? Number(args.start_s) : (originalStartS !== null ? originalStartS : 0);
+  // insertClip is called with the ProjectItem's own current in/out marks, which
+  // may not match this TrackItem's trim on the timeline (no in/out is set here
+  // to avoid introducing another not-yet-proven-live native call in the same
+  // change) — verify the inserted clip's duration in the Premiere UI.
+  var inserted = null;
+  try {
+    inserted = toTrack.insertClip(projectItem, targetStartS);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err), clip_name: clipName });
+  }
+  if (!inserted) {
+    return paJson({ ok: false, error: 'Premiere rejected the insertClip call', clip_name: clipName });
+  }
+  var removed = false;
+  var removeError = null;
+  var removeAttempted = !!args.remove_original;
+  if (removeAttempted) {
+    // TrackItem.remove() is undocumented and unproven on this Premiere build —
+    // attempt only when explicitly requested, as its own isolated step, so a
+    // crash here doesn't also implicate (or hide behind) the insert above.
+    try {
+      if (typeof clip.remove === 'function') {
+        clip.remove();
+        removed = true;
+      } else {
+        removeError = 'clip.remove is not a function on this Premiere build';
+      }
+    } catch (removeErr) {
+      removeError = String(removeErr);
+    }
+  }
+  return paJson({
+    ok: true,
+    sequence_id: paSequenceId(seq),
+    clip_name: clipName,
+    track_type: trackType,
+    from_track_index: fromIndex,
+    to_track_index: toIndex,
+    start_s: targetStartS,
+    remove_attempted: removeAttempted,
+    original_removed: removed,
+    remove_error: removeError,
+    note: removeAttempted
+      ? (removed
+          ? 'Clip inserted on the target track and the original was removed from the source track.'
+          : 'Clip inserted on the target track, but removing the original failed — delete it manually in the Premiere UI.')
+      : 'Clip copied to the target track. remove_original was not set, so the original clip is still on the source track — delete it manually, or call again with remove_original=true once the copy is confirmed correct.'
+  });
+}
