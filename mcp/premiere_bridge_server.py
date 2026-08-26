@@ -192,6 +192,51 @@ class MockPremiereBackend:
             raise JsonRpcError(-32602, "time_s is required")
         return {"ok": True, "removed": True, "effect": params.get("effect_name"), "property": params.get("property_name"), "time_s": params["time_s"]}
 
+    def select_clips_by_name(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("name"):
+            raise JsonRpcError(-32602, "name is required")
+        return {"ok": True, "selected": 1, "query": params["name"]}
+
+    def select_all_clips(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "selected": 2}
+
+    def deselect_all_clips(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "deselected": 2}
+
+    def select_clips_in_range(self, params: dict[str, Any]) -> dict[str, Any]:
+        if params.get("start_s") is None or params.get("end_s") is None:
+            raise JsonRpcError(-32602, "start_s and end_s are required")
+        return {"ok": True, "selected": 1, "range_start_s": params["start_s"], "range_end_s": params["end_s"]}
+
+    def select_clips_by_color(self, params: dict[str, Any]) -> dict[str, Any]:
+        if params.get("color_index") is None:
+            raise JsonRpcError(-32602, "color_index is required")
+        return {"ok": True, "selected": 0, "color_index": params["color_index"]}
+
+    def invert_selection(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "now_selected": 1, "now_deselected": 1}
+
+    def select_disabled_clips(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "selected": 0}
+
+    def copy_effect_values(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_backup(params)
+        if not params.get("effect_name"):
+            raise JsonRpcError(-32602, "effect_name is required")
+        return {"ok": True, "copied_properties": 1, "effect": params["effect_name"], "source_clip": "mock_src", "target_clip": "mock_tgt"}
+
+    def remove_effect_by_name(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_backup(params)
+        if not params.get("effect_name"):
+            raise JsonRpcError(-32602, "effect_name is required")
+        return {"ok": True, "removed": 1, "effect": params["effect_name"], "clip_name": "mock_clip"}
+
+    def set_blend_mode(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_backup(params)
+        if not params.get("blend_mode"):
+            raise JsonRpcError(-32602, "blend_mode is required")
+        return {"ok": True, "blend_mode_requested": params["blend_mode"], "blend_mode_value_written": 1, "clip_name": "mock_clip", "warning": "UNVERIFIED mapping on real Premiere; mock backend does not model this."}
+
     def move_clip(self, params: dict[str, Any]) -> dict[str, Any]:
         seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
         _require_backup(params)

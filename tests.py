@@ -1041,6 +1041,56 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge remove_keyframe", str(kf_remove))
         else:
             R.ok("Premiere bridge remove_keyframe")
+        sel_name = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 50, "method": "select_clips_by_name", "params": {"sequence_id": "seq_main", "name": "clip"}})
+        if not sel_name or not sel_name.get("result", {}).get("ok"):
+            R.fail("Premiere bridge select_clips_by_name", str(sel_name))
+        else:
+            R.ok("Premiere bridge select_clips_by_name")
+        sel_all = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 51, "method": "select_all_clips", "params": {"sequence_id": "seq_main"}})
+        if not sel_all or not sel_all.get("result", {}).get("ok"):
+            R.fail("Premiere bridge select_all_clips", str(sel_all))
+        else:
+            R.ok("Premiere bridge select_all_clips")
+        desel_all = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 52, "method": "deselect_all_clips", "params": {"sequence_id": "seq_main"}})
+        if not desel_all or not desel_all.get("result", {}).get("ok"):
+            R.fail("Premiere bridge deselect_all_clips", str(desel_all))
+        else:
+            R.ok("Premiere bridge deselect_all_clips")
+        sel_range = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 53, "method": "select_clips_in_range", "params": {"sequence_id": "seq_main", "start_s": 0, "end_s": 5}})
+        if not sel_range or not sel_range.get("result", {}).get("ok"):
+            R.fail("Premiere bridge select_clips_in_range", str(sel_range))
+        else:
+            R.ok("Premiere bridge select_clips_in_range")
+        sel_color = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 54, "method": "select_clips_by_color", "params": {"sequence_id": "seq_main", "color_index": 3}})
+        if not sel_color or not sel_color.get("result", {}).get("ok"):
+            R.fail("Premiere bridge select_clips_by_color", str(sel_color))
+        else:
+            R.ok("Premiere bridge select_clips_by_color")
+        inv_sel = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 55, "method": "invert_selection", "params": {"sequence_id": "seq_main"}})
+        if not inv_sel or not inv_sel.get("result", {}).get("ok"):
+            R.fail("Premiere bridge invert_selection", str(inv_sel))
+        else:
+            R.ok("Premiere bridge invert_selection")
+        sel_disabled = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 56, "method": "select_disabled_clips", "params": {"sequence_id": "seq_main"}})
+        if not sel_disabled or not sel_disabled.get("result", {}).get("ok"):
+            R.fail("Premiere bridge select_disabled_clips", str(sel_disabled))
+        else:
+            R.ok("Premiere bridge select_disabled_clips")
+        copy_fx = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 57, "method": "copy_effect_values", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "source_track_type": "video", "source_track_index": 0, "source_clip_index": 0, "target_track_type": "video", "target_track_index": 0, "target_clip_index": 1, "effect_name": "Opacity"}})
+        if not copy_fx or not copy_fx.get("result", {}).get("ok"):
+            R.fail("Premiere bridge copy_effect_values", str(copy_fx))
+        else:
+            R.ok("Premiere bridge copy_effect_values")
+        remove_fx = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 58, "method": "remove_effect_by_name", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Gaussian Blur"}})
+        if not remove_fx or not remove_fx.get("result", {}).get("ok"):
+            R.fail("Premiere bridge remove_effect_by_name", str(remove_fx))
+        else:
+            R.ok("Premiere bridge remove_effect_by_name")
+        blend = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 59, "method": "set_blend_mode", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "track_index": 0, "clip_index": 0, "blend_mode": "Multiply"}})
+        if not blend or not blend.get("result", {}).get("ok"):
+            R.fail("Premiere bridge set_blend_mode", str(blend))
+        else:
+            R.ok("Premiere bridge set_blend_mode")
         listed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 31, "method": "list_markers", "params": {"sequence_id": "seq_main"}})
         if not listed or listed.get("result", {}).get("marker_count") != 1 or listed.get("result", {}).get("verification", {}).get("mutates_project") is not False:
             R.fail("Premiere bridge marker listing", str(listed))

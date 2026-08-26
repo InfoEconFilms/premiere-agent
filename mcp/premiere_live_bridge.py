@@ -420,6 +420,86 @@ class PremiereLiveBridge:
         }
         return self._request(BridgeRequest("remove_keyframe", payload, dry_run=dry_run)).to_dict()
 
+    def select_clips_by_name(
+        self, sequence_id: str, name: str, *, track_type: str = "both", track_index: int | None = None,
+        add_to_selection: bool = False, dry_run: bool = False,
+    ) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id, "name": name, "track_type": track_type, "track_index": track_index, "add_to_selection": add_to_selection}
+        return self._request(BridgeRequest("select_clips_by_name", payload, dry_run=dry_run)).to_dict()
+
+    def select_all_clips(
+        self, sequence_id: str, *, track_type: str = "both", track_index: int | None = None, dry_run: bool = False
+    ) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id, "track_type": track_type, "track_index": track_index}
+        return self._request(BridgeRequest("select_all_clips", payload, dry_run=dry_run)).to_dict()
+
+    def deselect_all_clips(self, sequence_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("deselect_all_clips", {"sequence_id": sequence_id}, dry_run=dry_run)).to_dict()
+
+    def select_clips_in_range(
+        self, sequence_id: str, start_s: float, end_s: float, *, track_type: str = "both", track_index: int | None = None, dry_run: bool = False
+    ) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id, "start_s": float(start_s), "end_s": float(end_s), "track_type": track_type, "track_index": track_index}
+        return self._request(BridgeRequest("select_clips_in_range", payload, dry_run=dry_run)).to_dict()
+
+    def select_clips_by_color(self, sequence_id: str, color_index: int, *, dry_run: bool = False) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id, "color_index": int(color_index)}
+        return self._request(BridgeRequest("select_clips_by_color", payload, dry_run=dry_run)).to_dict()
+
+    def invert_selection(self, sequence_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("invert_selection", {"sequence_id": sequence_id}, dry_run=dry_run)).to_dict()
+
+    def select_disabled_clips(self, sequence_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("select_disabled_clips", {"sequence_id": sequence_id}, dry_run=dry_run)).to_dict()
+
+    def copy_effect_values(
+        self,
+        sequence_id: str,
+        source_track_type: str, source_track_index: int, source_clip_index: int,
+        target_track_type: str, target_track_index: int, target_clip_index: int,
+        effect_name: str,
+        *,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("copy_effect_values", confirm)
+            _require_backup("copy_effect_values", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id,
+            "source_track_type": source_track_type, "source_track_index": int(source_track_index), "source_clip_index": int(source_clip_index),
+            "target_track_type": target_track_type, "target_track_index": int(target_track_index), "target_clip_index": int(target_clip_index),
+            "effect_name": effect_name,
+        }
+        return self._request(BridgeRequest("copy_effect_values", payload, dry_run=dry_run)).to_dict()
+
+    def remove_effect_by_name(
+        self, sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str,
+        *, backup_sequence_id: str | None = None, confirm: bool = False, dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("remove_effect_by_name", confirm)
+            _require_backup("remove_effect_by_name", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index), "effect_name": effect_name,
+        }
+        return self._request(BridgeRequest("remove_effect_by_name", payload, dry_run=dry_run)).to_dict()
+
+    def set_blend_mode(
+        self, sequence_id: str, track_type: str, track_index: int, clip_index: int, blend_mode: str,
+        *, backup_sequence_id: str | None = None, confirm: bool = False, dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_blend_mode", confirm)
+            _require_backup("set_blend_mode", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index), "blend_mode": blend_mode,
+        }
+        return self._request(BridgeRequest("set_blend_mode", payload, dry_run=dry_run)).to_dict()
+
     def import_media(
         self,
         sequence_id: str,

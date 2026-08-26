@@ -43,7 +43,17 @@
     set_effect_property: 'paSetEffectProperty',
     get_keyframes: 'paGetKeyframes',
     add_keyframe: 'paAddKeyframe',
-    remove_keyframe: 'paRemoveKeyframe'
+    remove_keyframe: 'paRemoveKeyframe',
+    select_clips_by_name: 'paSelectClipsByName',
+    select_all_clips: 'paSelectAllClips',
+    deselect_all_clips: 'paDeselectAllClips',
+    select_clips_in_range: 'paSelectClipsInRange',
+    select_clips_by_color: 'paSelectClipsByColor',
+    invert_selection: 'paInvertSelection',
+    select_disabled_clips: 'paSelectDisabledClips',
+    copy_effect_values: 'paCopyEffectValues',
+    remove_effect_by_name: 'paRemoveEffectByName',
+    set_blend_mode: 'paSetBlendMode'
   };
 
   function jsonRpcError(id, code, message) {

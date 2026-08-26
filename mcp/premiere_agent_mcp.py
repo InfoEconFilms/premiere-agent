@@ -367,6 +367,74 @@ def live_bridge_remove_keyframe(
     )
 
 
+def live_bridge_select_clips_by_name(
+    sequence_id: str, name: str, *, track_type: str = "both", track_index: int | None = None,
+    add_to_selection: bool = False, bridge_url: str | None = None, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).select_clips_by_name(sequence_id, name, track_type=track_type, track_index=track_index, add_to_selection=add_to_selection, dry_run=dry_run)
+
+
+def live_bridge_select_all_clips(
+    sequence_id: str, *, track_type: str = "both", track_index: int | None = None, bridge_url: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).select_all_clips(sequence_id, track_type=track_type, track_index=track_index, dry_run=dry_run)
+
+
+def live_bridge_deselect_all_clips(sequence_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).deselect_all_clips(sequence_id, dry_run=dry_run)
+
+
+def live_bridge_select_clips_in_range(
+    sequence_id: str, start_s: float, end_s: float, *, track_type: str = "both", track_index: int | None = None,
+    bridge_url: str | None = None, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).select_clips_in_range(sequence_id, start_s, end_s, track_type=track_type, track_index=track_index, dry_run=dry_run)
+
+
+def live_bridge_select_clips_by_color(sequence_id: str, color_index: int, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).select_clips_by_color(sequence_id, color_index, dry_run=dry_run)
+
+
+def live_bridge_invert_selection(sequence_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).invert_selection(sequence_id, dry_run=dry_run)
+
+
+def live_bridge_select_disabled_clips(sequence_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).select_disabled_clips(sequence_id, dry_run=dry_run)
+
+
+def live_bridge_copy_effect_values(
+    sequence_id: str,
+    source_track_type: str, source_track_index: int, source_clip_index: int,
+    target_track_type: str, target_track_index: int, target_clip_index: int,
+    effect_name: str,
+    *,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).copy_effect_values(
+        sequence_id, source_track_type, source_track_index, source_clip_index,
+        target_track_type, target_track_index, target_clip_index, effect_name,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
+def live_bridge_remove_effect_by_name(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str,
+    *, backup_sequence_id: str | None = None, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).remove_effect_by_name(sequence_id, track_type, track_index, clip_index, effect_name, backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_blend_mode(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int, blend_mode: str,
+    *, backup_sequence_id: str | None = None, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_blend_mode(sequence_id, track_type, track_index, clip_index, blend_mode, backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run)
+
+
 def live_bridge_move_clip(
     sequence_id: str,
     track_type: str,
@@ -681,6 +749,56 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Remove the keyframe at time_s on an effect property. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "property_name": {"type": "string"}, "time_s": {"type": "number"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name", "property_name", "time_s"]},
         "handler": lambda a: live_bridge_remove_keyframe(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], a["property_name"], a["time_s"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_select_clips_by_name": {
+        "description": "Select all clips whose name contains the given substring (case-insensitive). Selection is UI-only editing state, not a structural mutation, so no confirm/backup gate.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "name": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio", "both"], "default": "both"}, "track_index": {"type": "integer"}, "add_to_selection": {"type": "boolean", "default": False}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "name"]},
+        "handler": lambda a: live_bridge_select_clips_by_name(a["sequence_id"], a["name"], track_type=a.get("track_type", "both"), track_index=a.get("track_index"), add_to_selection=a.get("add_to_selection", False), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_select_all_clips": {
+        "description": "Select all clips in the sequence, or all clips on one track.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio", "both"], "default": "both"}, "track_index": {"type": "integer"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_select_all_clips(a["sequence_id"], track_type=a.get("track_type", "both"), track_index=a.get("track_index"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_deselect_all_clips": {
+        "description": "Deselect all clips in the sequence.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_deselect_all_clips(a["sequence_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_select_clips_in_range": {
+        "description": "Select all clips overlapping a time range.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "start_s": {"type": "number"}, "end_s": {"type": "number"}, "track_type": {"type": "string", "enum": ["video", "audio", "both"], "default": "both"}, "track_index": {"type": "integer"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "start_s", "end_s"]},
+        "handler": lambda a: live_bridge_select_clips_in_range(a["sequence_id"], a["start_s"], a["end_s"], track_type=a.get("track_type", "both"), track_index=a.get("track_index"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_select_clips_by_color": {
+        "description": "Select all clips whose source project item has the given color label index (0=Violet .. 15=Yellow).",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "color_index": {"type": "integer"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "color_index"]},
+        "handler": lambda a: live_bridge_select_clips_by_color(a["sequence_id"], a["color_index"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_invert_selection": {
+        "description": "Invert the current clip selection.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_invert_selection(a["sequence_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_select_disabled_clips": {
+        "description": "Select all disabled (unchecked) clips in the sequence.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_select_disabled_clips(a["sequence_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_copy_effect_values": {
+        "description": "Copy an effect's property values from one clip to another (both clips must already have that effect). Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "source_track_type": {"type": "string", "enum": ["video", "audio"]}, "source_track_index": {"type": "integer"}, "source_clip_index": {"type": "integer"}, "target_track_type": {"type": "string", "enum": ["video", "audio"]}, "target_track_index": {"type": "integer"}, "target_clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "source_track_type", "source_track_index", "source_clip_index", "target_track_type", "target_track_index", "target_clip_index", "effect_name"]},
+        "handler": lambda a: live_bridge_copy_effect_values(a["sequence_id"], a["source_track_type"], a["source_track_index"], a["source_clip_index"], a["target_track_type"], a["target_track_index"], a["target_clip_index"], a["effect_name"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_remove_effect_by_name": {
+        "description": "Remove all instances of an effect from a clip by display name, via Component.remove() — preflights every match first so a component this Premiere build can't remove causes no partial removal. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name"]},
+        "handler": lambda a: live_bridge_remove_effect_by_name(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_blend_mode": {
+        "description": "UNVERIFIED on Premiere 26.3.2: setting 'Multiply' was confirmed live to visually show as 'Darker Color' instead, and this build exposes two same-named 'Blend Mode' properties on Opacity, only the first of which is written. Do not trust the name->value mapping; check Effect Controls after calling. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "blend_mode": {"type": "string", "enum": ["Normal", "Dissolve", "Darken", "Multiply", "Color Burn", "Linear Burn", "Darker Color", "Lighten", "Screen", "Color Dodge", "Linear Dodge", "Lighter Color", "Overlay", "Soft Light", "Hard Light", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Difference", "Exclusion", "Subtract", "Divide", "Hue", "Saturation", "Color", "Luminosity"]}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "blend_mode"]},
+        "handler": lambda a: live_bridge_set_blend_mode(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["blend_mode"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_move_clip": {
         "description": "Copy a clip onto a different track (e.g. onto a separate camera track for multicam layout) via Track.insertClip. By default the original is left in place (remove_original=false) since TrackItem removal is unproven on this Premiere build; only set remove_original=true after confirming the copy looks correct. Requires confirm=true and backup_sequence_id.",

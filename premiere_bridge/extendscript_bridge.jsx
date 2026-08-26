@@ -1460,6 +1460,317 @@ function paRemoveKeyframe(raw) {
   }
 }
 
+// Selection tools: pure public DOM (clip.setSelected/isSelected/isDisabled,
+// projectItem.getColorLabel). Selection state is trivially reversible UI state,
+// not a structural/timing/effect mutation, so unlike every write tool above
+// these do not require backup_sequence_id.
+function paDeselectAllClipsInSeq(seq) {
+  var count = 0;
+  try {
+    for (var t = 0; t < seq.videoTracks.numTracks; t += 1) {
+      var vt = seq.videoTracks[t];
+      for (var c = 0; c < vt.clips.numItems; c += 1) { vt.clips[c].setSelected(false, true); count += 1; }
+    }
+    for (var a = 0; a < seq.audioTracks.numTracks; a += 1) {
+      var at = seq.audioTracks[a];
+      for (var c2 = 0; c2 < at.clips.numItems; c2 += 1) { at.clips[c2].setSelected(false, true); count += 1; }
+    }
+  } catch (err) {}
+  return count;
+}
+
+function paSelectClipsByName(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var query = String(args.name || '').toLowerCase();
+  var trackType = String(args.track_type || 'both');
+  var addToSelection = !!args.add_to_selection;
+  var trackIndex = (args.track_index !== undefined && args.track_index !== null) ? Number(args.track_index) : null;
+  if (!addToSelection) paDeselectAllClipsInSeq(seq);
+  var count = 0;
+  try {
+    function scan(tracks) {
+      for (var t = 0; t < tracks.numTracks; t += 1) {
+        if (trackIndex !== null && t !== trackIndex) continue;
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c += 1) {
+          var clip = track.clips[c];
+          if (String(clip.name || '').toLowerCase().indexOf(query) !== -1) {
+            clip.setSelected(true, true);
+            count += 1;
+          }
+        }
+      }
+    }
+    if (trackType !== 'audio') scan(seq.videoTracks);
+    if (trackType !== 'video') scan(seq.audioTracks);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, selected: count, query: String(args.name || '') });
+}
+
+function paSelectAllClips(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var trackType = String(args.track_type || 'both');
+  var trackIndex = (args.track_index !== undefined && args.track_index !== null) ? Number(args.track_index) : null;
+  var count = 0;
+  try {
+    function selectAll(tracks) {
+      for (var t = 0; t < tracks.numTracks; t += 1) {
+        if (trackIndex !== null && t !== trackIndex) continue;
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c += 1) { track.clips[c].setSelected(true, true); count += 1; }
+      }
+    }
+    if (trackType !== 'audio') selectAll(seq.videoTracks);
+    if (trackType !== 'video') selectAll(seq.audioTracks);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, selected: count });
+}
+
+function paDeselectAllClips(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var count = paDeselectAllClipsInSeq(seq);
+  return paJson({ ok: true, deselected: count });
+}
+
+function paSelectClipsInRange(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var trackType = String(args.track_type || 'both');
+  var trackIndex = (args.track_index !== undefined && args.track_index !== null) ? Number(args.track_index) : null;
+  var startTicks = paSecondsToTicks(Number(args.start_s || 0));
+  var endTicks = paSecondsToTicks(Number(args.end_s || 0));
+  paDeselectAllClipsInSeq(seq);
+  var count = 0;
+  try {
+    function selectInRange(tracks) {
+      for (var t = 0; t < tracks.numTracks; t += 1) {
+        if (trackIndex !== null && t !== trackIndex) continue;
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c += 1) {
+          var clip = track.clips[c];
+          var cs = parseFloat(clip.start.ticks);
+          var ce = parseFloat(clip.end.ticks);
+          if (cs < endTicks && ce > startTicks) { clip.setSelected(true, true); count += 1; }
+        }
+      }
+    }
+    if (trackType !== 'audio') selectInRange(seq.videoTracks);
+    if (trackType !== 'video') selectInRange(seq.audioTracks);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, selected: count, range_start_s: Number(args.start_s || 0), range_end_s: Number(args.end_s || 0) });
+}
+
+function paSelectClipsByColor(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var colorIndex = Number(args.color_index);
+  paDeselectAllClipsInSeq(seq);
+  var count = 0;
+  try {
+    function scan(tracks) {
+      for (var t = 0; t < tracks.numTracks; t += 1) {
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c += 1) {
+          var clip = track.clips[c];
+          try {
+            if (clip.projectItem && clip.projectItem.getColorLabel() === colorIndex) {
+              clip.setSelected(true, true);
+              count += 1;
+            }
+          } catch (innerErr) {}
+        }
+      }
+    }
+    scan(seq.videoTracks);
+    scan(seq.audioTracks);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, selected: count, color_index: colorIndex });
+}
+
+function paInvertSelection(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var nowSelected = 0;
+  var nowDeselected = 0;
+  try {
+    function invert(tracks) {
+      for (var t = 0; t < tracks.numTracks; t += 1) {
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c += 1) {
+          var clip = track.clips[c];
+          if (clip.isSelected()) { clip.setSelected(false, true); nowDeselected += 1; }
+          else { clip.setSelected(true, true); nowSelected += 1; }
+        }
+      }
+    }
+    invert(seq.videoTracks);
+    invert(seq.audioTracks);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, now_selected: nowSelected, now_deselected: nowDeselected });
+}
+
+function paSelectDisabledClips(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  paDeselectAllClipsInSeq(seq);
+  var count = 0;
+  try {
+    function scan(tracks) {
+      for (var t = 0; t < tracks.numTracks; t += 1) {
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c += 1) {
+          try {
+            if (track.clips[c].isDisabled()) { track.clips[c].setSelected(true, true); count += 1; }
+          } catch (innerErr) {}
+        }
+      }
+    }
+    scan(seq.videoTracks);
+    scan(seq.audioTracks);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, selected: count });
+}
+
+// Effect-level copy/remove/blend-mode: pure public Component/Property DOM.
+function paCopyEffectValues(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var srcClip = paLookupClip(seq, String(args.source_track_type || 'video').toLowerCase(), Number(args.source_track_index), Number(args.source_clip_index));
+  if (!srcClip) return paJson({ ok: false, error: 'Source clip not found' });
+  var tgtClip = paLookupClip(seq, String(args.target_track_type || 'video').toLowerCase(), Number(args.target_track_index), Number(args.target_clip_index));
+  if (!tgtClip) return paJson({ ok: false, error: 'Target clip not found' });
+  var effectName = String(args.effect_name || '');
+  var srcComp = paFindComponent(srcClip, effectName);
+  if (!srcComp) return paJson({ ok: false, error: 'Effect not found on source clip: ' + effectName });
+  var tgtComp = paFindComponent(tgtClip, effectName);
+  if (!tgtComp) return paJson({ ok: false, error: 'Effect not found on target clip: ' + effectName });
+  var copied = 0;
+  try {
+    for (var p = 0; p < srcComp.properties.numItems; p += 1) {
+      var srcProp = srcComp.properties[p];
+      var tgtProp = paFindProperty(tgtComp, String(srcProp.displayName || ''));
+      if (!tgtProp) continue;
+      try {
+        var val = srcProp.getValue(0, 0);
+        tgtProp.setValue(val, true);
+        copied += 1;
+      } catch (setErr) {}
+    }
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, copied_properties: copied, effect: effectName, source_clip: String(srcClip.name || ''), target_clip: String(tgtClip.name || '') });
+}
+
+function paRemoveEffectByName(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var effectName = String(args.effect_name || '');
+  var matches = [];
+  try {
+    // Back-to-front so removal doesn't shift not-yet-processed indices, and
+    // preflight every match before mutating any so an unsupported component
+    // can't cause a partial removal.
+    for (var i = clip.components.numItems - 1; i >= 0; i -= 1) {
+      if (String(clip.components[i].displayName || '') === effectName) matches.push(i);
+    }
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  if (!matches.length) return paJson({ ok: false, error: 'Effect not found: ' + effectName });
+  for (var j = 0; j < matches.length; j += 1) {
+    var component = clip.components[matches[j]];
+    if (!component || typeof component.remove !== 'function') {
+      return paJson({ ok: false, unsupported: true, error: 'Premiere does not expose Component.remove() for "' + effectName + '" on this build. No matching components were removed; no safe targeted QE fallback exists — remove it manually in Effect Controls.' });
+    }
+  }
+  var removed = 0;
+  for (var k = 0; k < matches.length; k += 1) {
+    try {
+      clip.components[matches[k]].remove();
+      removed += 1;
+    } catch (removeErr) {
+      return paJson({ ok: false, error: 'Premiere could not remove "' + effectName + '" after removing ' + removed + ' matching component(s): ' + String(removeErr) });
+    }
+  }
+  return paJson({ ok: true, removed: removed, effect: effectName, clip_name: String(clip.name || '') });
+}
+
+var PA_BLEND_MODE_VALUES = {
+  'Normal': 1, 'Dissolve': 2, 'Darken': 3, 'Multiply': 4, 'Color Burn': 5,
+  'Linear Burn': 6, 'Darker Color': 7, 'Lighten': 8, 'Screen': 9, 'Color Dodge': 10,
+  'Linear Dodge': 11, 'Lighter Color': 12, 'Overlay': 13, 'Soft Light': 14,
+  'Hard Light': 15, 'Vivid Light': 16, 'Linear Light': 17, 'Pin Light': 18,
+  'Hard Mix': 19, 'Difference': 20, 'Exclusion': 21, 'Subtract': 22, 'Divide': 23,
+  'Hue': 24, 'Saturation': 25, 'Color': 26, 'Luminosity': 27
+};
+
+// UNVERIFIED: the Opacity component exposes TWO distinct properties both
+// displayName === 'Blend Mode' on this Premiere build (26.3.2) — paFindProperty
+// returns only the first. Setting it to the value this map claims for
+// "Multiply" (4) visibly produced "Darker Color" in the UI instead (confirmed
+// live), so PA_BLEND_MODE_VALUES (ported verbatim from upstream) does not
+// reliably map onto this build's real enum, and it's unclear which of the two
+// same-named properties is the one actually driving compositing. Do not trust
+// this mapping until it's re-derived empirically against a real Premiere build.
+function paSetBlendMode(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var blendModeName = String(args.blend_mode || 'Normal');
+  var modeValue = PA_BLEND_MODE_VALUES.hasOwnProperty(blendModeName) ? PA_BLEND_MODE_VALUES[blendModeName] : 1;
+  var comp = paFindComponent(clip, 'Opacity');
+  if (!comp) return paJson({ ok: false, error: 'Opacity component not found on clip' });
+  var prop = paFindProperty(comp, 'Blend Mode');
+  if (!prop) return paJson({ ok: false, error: 'Blend Mode property not found on Opacity component' });
+  try {
+    prop.setValue(modeValue, true);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({
+    ok: true,
+    blend_mode_requested: blendModeName,
+    blend_mode_value_written: modeValue,
+    clip_name: String(clip.name || ''),
+    warning: 'UNVERIFIED: this build exposes two properties both named "Blend Mode" on Opacity; only the first was written, and confirmed live that value 4 ("Multiply" per this map) actually shows as "Darker Color" in the UI. Do not trust blend_mode_requested as the real visual result — check the Effect Controls panel.'
+  });
+}
+
 function paInspectDomObject(raw) {
   var args = paParse(raw);
   var objectPath = String(args.object_path || '');
