@@ -980,19 +980,91 @@ function paImportCaptions(raw) {
   });
 }
 
+function paParseTrackSpec(spec, defaultType) {
+  var s = String(spec || '').trim();
+  if (!s) return { type: defaultType || 'video', index: 0 };
+  var m = /^([va])(\d+)$/i.exec(s);
+  if (m) {
+    return { type: (m[1].toLowerCase() === 'a') ? 'audio' : 'video', index: Math.max(0, parseInt(m[2], 10) - 1) };
+  }
+  var n = Number(s);
+  if (isFinite(n)) return { type: defaultType || 'video', index: Math.max(0, Math.floor(n)) };
+  return { type: defaultType || 'video', index: 0 };
+}
+
 function paImportMedia(raw) {
   var args = paParse(raw);
   var backupErr = paRequireBackup(args);
   if (backupErr) return paJson(backupErr);
   if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var path = String(args.media_path || '');
+  if (!path) return paJson({ ok: false, error: 'media_path required' });
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+
+  // Diff the project root's children before/after import to find the newly
+  // added item, using stable string nodeIds (not object references, which
+  // ExtendScript collections can hand back as fresh wrapper instances on
+  // each access -- see the duplicate_sequence fix for the same gotcha).
+  var beforeIds = {};
   try {
-    var path = String(args.media_path || '');
-    if (!path) return paJson({ ok: false, error: 'media_path required' });
-    var ok = app.project.importFiles([path], true, app.project.rootItem, false);
-    return paJson({ ok: !!ok, sequence_id: args.sequence_id || null, imported: { media_path: path, backup_sequence_id: args.backup_sequence_id }, note: 'Imported to project bin; sequence insertion is version-specific and remains a follow-up operation.' });
-  } catch (err) {
-    return paJson({ ok: false, error: String(err) });
+    var existing = app.project.rootItem.children;
+    for (var i = 0; i < existing.numItems; i += 1) {
+      try { beforeIds[String(existing[i].nodeId)] = true; } catch (e0) {}
+    }
+  } catch (scanErr) {}
+
+  var importOk = false;
+  try { importOk = !!app.project.importFiles([path], true, app.project.rootItem, false); }
+  catch (impErr) { return paJson({ ok: false, error: String(impErr) }); }
+  if (!importOk) return paJson({ ok: false, error: 'Import failed', media_path: path });
+
+  var newItem = null;
+  try {
+    var after = app.project.rootItem.children;
+    for (var j = 0; j < after.numItems; j += 1) {
+      var cand = after[j];
+      if (cand && !beforeIds[String(cand.nodeId)]) { newItem = cand; break; }
+    }
+  } catch (scan2Err) {}
+  if (!newItem) {
+    try { newItem = paFindProjectItem(new File(path).name); } catch (fallbackErr) {}
   }
+  if (!newItem) {
+    return paJson({ ok: true, imported: true, inserted: false, sequence_id: paSequenceId(seq), media_path: path, note: 'File imported to project bin, but could not identify the new project item to insert into the sequence.' });
+  }
+
+  var spec = paParseTrackSpec(args.track, 'video');
+  var tracks = (spec.type === 'audio') ? seq.audioTracks : seq.videoTracks;
+  var track = null;
+  try { track = tracks[spec.index]; } catch (trackErr) {}
+  if (!track || typeof track.insertClip !== 'function') {
+    return paJson({ ok: true, imported: true, inserted: false, sequence_id: paSequenceId(seq), media_path: path, item_node_id: String(newItem.nodeId || ''), note: 'File imported to project bin, but the requested track (' + spec.type + ' index ' + spec.index + ') is unavailable or does not support insertClip.' });
+  }
+
+  var timeS = (args.time_s !== undefined && args.time_s !== null) ? Number(args.time_s) : 0;
+  try {
+    // Track.insertClip's documented signature takes a ProjectItem. newItem
+    // came straight from app.project.rootItem.children, so it already is
+    // one -- never pass a TrackItem here (see the ExtendScript crash gotcha).
+    track.insertClip(newItem, timeS);
+  } catch (insertErr) {
+    return paJson({ ok: true, imported: true, inserted: false, sequence_id: paSequenceId(seq), media_path: path, item_node_id: String(newItem.nodeId || ''), error: String(insertErr) });
+  }
+
+  return paJson({
+    ok: true,
+    imported: true,
+    inserted: true,
+    sequence_id: paSequenceId(seq),
+    media_path: path,
+    item_node_id: String(newItem.nodeId || ''),
+    item_name: String(newItem.name || ''),
+    track_type: spec.type,
+    track_index: spec.index,
+    time_s: timeS,
+    backup_sequence_id: args.backup_sequence_id
+  });
 }
 
 function paQueueExport(raw) {

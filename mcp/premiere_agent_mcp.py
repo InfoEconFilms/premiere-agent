@@ -1308,7 +1308,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "handler": lambda a: live_bridge_import_captions(a["sequence_id"], a["caption_path"], start_s=a.get("start_s", 0.0), caption_format=a.get("caption_format", "subtitle"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_import_media": {
-        "description": "Import a media file (e.g. a rendered motion graphic) into a live Premiere project/sequence at an optional time/track. Requires confirm=true and backup_sequence_id.",
+        "description": "Import a media file (e.g. a rendered motion graphic) into the project bin, then insert it into the sequence via Track.insertClip at `time_s` (default 0) on `track` (e.g. \"V1\", \"A2\"; plain track type + 1-based index, default video track 1). Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "media_path": {"type": "string"}, "time_s": {"type": "number"}, "track": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "media_path"]},
         "handler": lambda a: live_bridge_import_media(a["sequence_id"], a["media_path"], time_s=a.get("time_s"), track=a.get("track"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
