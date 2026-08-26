@@ -34,7 +34,10 @@
     apply_basic_lumetri: 'paApplyBasicLumetri',
     set_clip_transform: 'paSetClipTransform',
     move_clip: 'paMoveClip',
-    remove_clip: 'paRemoveClip'
+    remove_clip: 'paRemoveClip',
+    execute_extendscript: 'paExecuteExtendScript',
+    evaluate_expression: 'paEvaluateExpression',
+    inspect_dom_object: 'paInspectDomObject'
   };
 
   function jsonRpcError(id, code, message) {

@@ -1162,3 +1162,97 @@ function paMoveClip(raw) {
       : 'Clip copied to the target track. remove_original was not set, so the original clip is still on the source track — delete it manually, or call again with remove_original=true once the copy is confirmed correct.'
   });
 }
+
+// Escape hatch for anything not covered by a fixed tool above. Runs in THIS
+// file's already-loaded engine (unlike a fresh-process bridge), so user code
+// gets free access to every paXxx helper already defined here, and read-only
+// calls need no Premiere relaunch — only editing this .jsx does.
+//
+// This carries the exact same risk as hand-editing this file: a try/catch
+// protects against thrown JS exceptions, NOT against passing a wrong native
+// object type into a method with a fixed native signature, which can crash the
+// whole Premiere process outright (see paMoveClip's history above). Treat any
+// mutating call through here with the same care as a new paXxx function: never
+// guess at native argument types, prefer property reads when exploring, and
+// isolate an unproven mutating call before combining it with others.
+function paExecuteExtendScript(raw) {
+  var args = paParse(raw);
+  var code = String(args.code || '');
+  if (!code) return paJson({ ok: false, error: 'code is required' });
+  try {
+    var __pa_exec_result = eval('(function(){\n' + code + '\n})()');
+    return paJson({ ok: true, result: __pa_exec_result === undefined ? null : __pa_exec_result });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paEvaluateExpression(raw) {
+  var args = paParse(raw);
+  var expression = String(args.expression || '');
+  if (!expression) return paJson({ ok: false, error: 'expression is required' });
+  try {
+    var __pa_eval_value = eval('(' + expression + ')');
+    return paJson({ ok: true, value: __pa_eval_value === undefined ? null : __pa_eval_value, value_type: typeof __pa_eval_value });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paInspectDomObjectValue(obj, depth, maxDepth) {
+  if (depth > maxDepth) return '<max depth>';
+  if (obj === null) return null;
+  if (obj === undefined) return undefined;
+  var t = typeof obj;
+  if (t === 'string' || t === 'number' || t === 'boolean') return obj;
+  var result = {};
+  var propCount = 0;
+  try {
+    for (var key in obj) {
+      if (propCount > 50) { result.__truncated = true; break; }
+      try {
+        var val = obj[key];
+        var vt = typeof val;
+        if (vt === 'function') {
+          result[key] = '[function]';
+        } else if (vt === 'object' && val !== null) {
+          result[key] = (depth < maxDepth) ? paInspectDomObjectValue(val, depth + 1, maxDepth) : '[object]';
+        } else {
+          result[key] = val;
+        }
+      } catch (propErr) {
+        result[key] = '[error: ' + String(propErr) + ']';
+      }
+      propCount += 1;
+    }
+  } catch (enumErr) {
+    return { __error: String(enumErr) };
+  }
+  // for-in on a native/COM-like object often misses its own collection/identity
+  // properties entirely, so probe the common ones directly too.
+  try { if (obj.numItems !== undefined) result.numItems = obj.numItems; } catch (e1) {}
+  try { if (obj.numTracks !== undefined) result.numTracks = obj.numTracks; } catch (e2) {}
+  try { if (obj.numSequences !== undefined) result.numSequences = obj.numSequences; } catch (e3) {}
+  try { if (obj.length !== undefined) result.length = obj.length; } catch (e4) {}
+  try { if (obj.name !== undefined) result.name = obj.name; } catch (e5) {}
+  try { if (obj.displayName !== undefined) result.displayName = obj.displayName; } catch (e6) {}
+  try { if (obj.matchName !== undefined) result.matchName = obj.matchName; } catch (e7) {}
+  try { if (obj.nodeId !== undefined) result.nodeId = obj.nodeId; } catch (e8) {}
+  return result;
+}
+
+function paInspectDomObject(raw) {
+  var args = paParse(raw);
+  var objectPath = String(args.object_path || '');
+  if (!objectPath) return paJson({ ok: false, error: 'object_path is required' });
+  var maxDepth = Number(args.max_depth);
+  if (!isFinite(maxDepth)) maxDepth = 1;
+  if (maxDepth > 3) maxDepth = 3;
+  if (maxDepth < 0) maxDepth = 0;
+  try {
+    var target = eval('(' + objectPath + ')');
+    return paJson({ ok: true, object_path: objectPath, inspected: paInspectDomObjectValue(target, 0, maxDepth) });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err), object_path: objectPath });
+  }
+}

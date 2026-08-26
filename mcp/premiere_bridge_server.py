@@ -146,6 +146,21 @@ class MockPremiereBackend:
             "message": "Backup sequence created before live mutation.",
         }
 
+    def execute_extendscript(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("code"):
+            raise JsonRpcError(-32602, "code is required")
+        return {"ok": True, "result": None, "note": "Mock backend does not execute ExtendScript; live behavior runs against the real Premiere engine."}
+
+    def evaluate_expression(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("expression"):
+            raise JsonRpcError(-32602, "expression is required")
+        return {"ok": True, "value": None, "value_type": "undefined", "note": "Mock backend does not evaluate ExtendScript."}
+
+    def inspect_dom_object(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("object_path"):
+            raise JsonRpcError(-32602, "object_path is required")
+        return {"ok": True, "object_path": params["object_path"], "inspected": {}, "note": "Mock backend does not introspect ExtendScript objects."}
+
     def move_clip(self, params: dict[str, Any]) -> dict[str, Any]:
         seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
         _require_backup(params)

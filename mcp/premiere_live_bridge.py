@@ -308,6 +308,21 @@ class PremiereLiveBridge:
         }
         return self._request(BridgeRequest("remove_clip", payload, dry_run=dry_run)).to_dict()
 
+    def execute_extendscript(self, code: str, *, timeout_s: float | None = None, dry_run: bool = False) -> dict[str, Any]:
+        payload = {"code": code}
+        req = BridgeRequest("execute_extendscript", payload, dry_run=dry_run)
+        if timeout_s is not None:
+            self.timeout_s = float(timeout_s)
+        return self._request(req).to_dict()
+
+    def evaluate_expression(self, expression: str, *, dry_run: bool = False) -> dict[str, Any]:
+        payload = {"expression": expression}
+        return self._request(BridgeRequest("evaluate_expression", payload, dry_run=dry_run)).to_dict()
+
+    def inspect_dom_object(self, object_path: str, *, max_depth: int = 1, dry_run: bool = False) -> dict[str, Any]:
+        payload = {"object_path": object_path, "max_depth": int(max_depth)}
+        return self._request(BridgeRequest("inspect_dom_object", payload, dry_run=dry_run)).to_dict()
+
     def import_media(
         self,
         sequence_id: str,

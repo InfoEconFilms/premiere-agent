@@ -258,6 +258,35 @@ def live_bridge_duplicate_sequence(
     )
 
 
+def live_bridge_execute_extendscript(
+    code: str,
+    *,
+    timeout_s: float | None = None,
+    bridge_url: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).execute_extendscript(code, timeout_s=timeout_s, dry_run=dry_run)
+
+
+def live_bridge_evaluate_expression(
+    expression: str,
+    *,
+    bridge_url: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).evaluate_expression(expression, dry_run=dry_run)
+
+
+def live_bridge_inspect_dom_object(
+    object_path: str,
+    *,
+    max_depth: int = 1,
+    bridge_url: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).inspect_dom_object(object_path, max_depth=max_depth, dry_run=dry_run)
+
+
 def live_bridge_move_clip(
     sequence_id: str,
     track_type: str,
@@ -527,6 +556,21 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Duplicate/backup a live Premiere sequence. Requires confirm=true for any non-dry-run write.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "backup_name": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
         "handler": lambda a: live_bridge_duplicate_sequence(a["sequence_id"], a.get("backup_name"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_execute_extendscript": {
+        "description": "Escape hatch: run arbitrary ES3 ExtendScript in Premiere's already-loaded engine for anything not covered by a fixed tool. Code runs as the body of a function and may `return` a plain value (JSON-serialized back). Has full access to every paXxx helper already defined in extendscript_bridge.jsx (paFindSequence, paSequenceId, paClipSummary, etc.) since it evals in that same file's scope. DANGEROUS: carries the same risk as hand-editing that file — a try/catch here only protects against thrown JS exceptions, NOT against passing a wrong native object type into a method with a fixed signature, which can crash the whole Premiere process (this happened once during development of move_clip). Never guess at native method argument types; prefer read-only property access when exploring; there is no confirm/backup_sequence_id gate here because arbitrary code can't be statically classified as safe or not — the caller is fully responsible for that judgment on every call, the same as if editing the .jsx directly.",
+        "inputSchema": {"type": "object", "properties": {"code": {"type": "string"}, "timeout_s": {"type": "number"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["code"]},
+        "handler": lambda a: live_bridge_execute_extendscript(a["code"], timeout_s=a.get("timeout_s"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_evaluate_expression": {
+        "description": "Evaluate a single read-focused ExtendScript expression (e.g. 'app.version', 'app.project.activeSequence.videoTracks.numTracks') and return its value. For a multi-statement script, use execute_extendscript instead.",
+        "inputSchema": {"type": "object", "properties": {"expression": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["expression"]},
+        "handler": lambda a: live_bridge_evaluate_expression(a["expression"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_inspect_dom_object": {
+        "description": "Read-only: list a Premiere DOM object's properties (never calls methods) for API exploration/debugging, e.g. object_path='app.project.activeSequence.videoTracks[0].clips[0]'.",
+        "inputSchema": {"type": "object", "properties": {"object_path": {"type": "string"}, "max_depth": {"type": "integer", "default": 1}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["object_path"]},
+        "handler": lambda a: live_bridge_inspect_dom_object(a["object_path"], max_depth=a.get("max_depth", 1), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_move_clip": {
         "description": "Copy a clip onto a different track (e.g. onto a separate camera track for multicam layout) via Track.insertClip. By default the original is left in place (remove_original=false) since TrackItem removal is unproven on this Premiere build; only set remove_original=true after confirming the copy looks correct. Requires confirm=true and backup_sequence_id.",

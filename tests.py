@@ -991,6 +991,21 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge remove clip backup enforcement", str(removed_no_backup))
         else:
             R.ok("Premiere bridge remove clip backup enforcement")
+        exec_result = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 37, "method": "execute_extendscript", "params": {"code": "return 1;"}})
+        if not exec_result or not exec_result.get("result", {}).get("ok"):
+            R.fail("Premiere bridge execute_extendscript", str(exec_result))
+        else:
+            R.ok("Premiere bridge execute_extendscript")
+        eval_result = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 38, "method": "evaluate_expression", "params": {"expression": "1+1"}})
+        if not eval_result or not eval_result.get("result", {}).get("ok"):
+            R.fail("Premiere bridge evaluate_expression", str(eval_result))
+        else:
+            R.ok("Premiere bridge evaluate_expression")
+        inspect_result = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 39, "method": "inspect_dom_object", "params": {"object_path": "app.project"}})
+        if not inspect_result or not inspect_result.get("result", {}).get("ok"):
+            R.fail("Premiere bridge inspect_dom_object", str(inspect_result))
+        else:
+            R.ok("Premiere bridge inspect_dom_object")
         listed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 31, "method": "list_markers", "params": {"sequence_id": "seq_main"}})
         if not listed or listed.get("result", {}).get("marker_count") != 1 or listed.get("result", {}).get("verification", {}).get("mutates_project") is not False:
             R.fail("Premiere bridge marker listing", str(listed))
