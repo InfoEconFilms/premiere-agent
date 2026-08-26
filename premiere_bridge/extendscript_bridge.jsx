@@ -423,26 +423,72 @@ function paDuplicateSequence(raw) {
   var seq = paFindSequence(args.sequence_id);
   if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
   var backupName = String(args.backup_name || (String(seq.name || 'Sequence') + '_AI_BACKUP'));
+  if (typeof seq.clone !== 'function' && typeof seq.duplicate !== 'function') {
+    return paJson({
+      ok: false,
+      unsupported: true,
+      sequence_id: paSequenceId(seq),
+      backup_name: backupName,
+      message: 'This Premiere version did not expose sequence clone/duplicate to ExtendScript. Duplicate the sequence manually, then pass its id/name as backup_sequence_id.'
+    });
+  }
   try {
-    // Premiere ExtendScript sequence duplication support varies by version.
-    // Try clone/duplicate if exposed, otherwise return a clear unsupported result.
-    var backup = null;
-    if (typeof seq.clone === 'function') backup = seq.clone();
-    else if (typeof seq.duplicate === 'function') backup = seq.duplicate();
-    if (backup) {
-      try { backup.name = backupName; } catch (renameErr) {}
-      return paJson({ ok: true, sequence_id: paSequenceId(seq), backup_sequence_id: paSequenceId(backup), backup_name: String(backup.name || backupName) });
+    // clone()/duplicate() returns a bare success flag rather than a reference to
+    // the new Sequence object on some Premiere builds, so locate the new sequence
+    // by diffing app.project.sequences before/after the call instead of trusting
+    // the return value. Diff by paSequenceId() string, not object reference (===):
+    // indexing into an ExtendScript collection can hand back a fresh JS wrapper
+    // each time even for the same underlying native sequence, so reference
+    // equality between two separate reads is unreliable and would otherwise make
+    // every existing sequence look "new".
+    var seqs = app.project.sequences;
+    var beforeIds = {};
+    if (seqs) {
+      for (var i = 0; i < seqs.numSequences; i += 1) {
+        var existing = seqs[i];
+        if (existing) beforeIds[paSequenceId(existing)] = true;
+      }
     }
+    var cloneResult = (typeof seq.clone === 'function') ? seq.clone() : seq.duplicate();
+    if (!cloneResult) {
+      return paJson({
+        ok: false,
+        unsupported: true,
+        sequence_id: paSequenceId(seq),
+        backup_name: backupName,
+        message: 'Premiere rejected the sequence clone/duplicate call.'
+      });
+    }
+    var backup = (cloneResult && typeof cloneResult === 'object' && cloneResult.name !== undefined) ? cloneResult : null;
+    if (!backup && seqs) {
+      for (var j = 0; j < seqs.numSequences; j += 1) {
+        var candidate = seqs[j];
+        if (candidate && !beforeIds[paSequenceId(candidate)]) { backup = candidate; break; }
+      }
+    }
+    if (!backup) {
+      return paJson({ ok: false, error: 'Sequence duplicated but the new sequence could not be located', sequence_id: paSequenceId(seq), backup_name: backupName });
+    }
+    // Sequence.name (and ProjectItem.name) are effectively read-only via
+    // ExtendScript: the assignment is accepted by the JS wrapper object without
+    // throwing, so reading it back in this same script reports the fake value —
+    // but it is never actually pushed down to Premiere's real sequence data, so
+    // the Project panel keeps showing Premiere's own auto-generated "Copy" name.
+    // This is a documented Adobe limitation (createSetNameAction() exists but has
+    // no script-callable execute()), not something this bridge can work around.
+    var actualName = String(backup.name || '');
+    return paJson({
+      ok: true,
+      sequence_id: paSequenceId(seq),
+      backup_sequence_id: paSequenceId(backup),
+      backup_name: backupName,
+      actual_backup_name: actualName,
+      backup_name_applied: false,
+      note: 'Sequence duplicated successfully, but Premiere\'s ExtendScript API does not support renaming a sequence, so it kept its auto-generated name (see actual_backup_name) instead of backup_name. Use backup_sequence_id to reference it reliably.'
+    });
   } catch (err) {
     return paJson({ ok: false, error: String(err), sequence_id: paSequenceId(seq), backup_name: backupName });
   }
-  return paJson({
-    ok: false,
-    unsupported: true,
-    sequence_id: paSequenceId(seq),
-    backup_name: backupName,
-    message: 'This Premiere version did not expose sequence clone/duplicate to ExtendScript. Duplicate the sequence manually, then pass its id/name as backup_sequence_id.'
-  });
 }
 
 function paAddMarker(raw) {

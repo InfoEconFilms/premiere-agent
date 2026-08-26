@@ -129,7 +129,11 @@ class PremiereLiveBridge:
         if parsed.get("error"):
             raise BridgeError(f"Premiere bridge error: {parsed['error']}")
         result = parsed.get("result", parsed)
-        return BridgeResponse(ok=True, action=req.action, dry_run=False, request=body, response=result)
+        # The transport succeeded (no JSON-RPC error), but the ExtendScript handler
+        # itself may report ok=false (e.g. unsupported on this Premiere version) —
+        # promote that so callers checking only the top-level ok don't miss it.
+        result_ok = result.get("ok", True) if isinstance(result, dict) else True
+        return BridgeResponse(ok=bool(result_ok), action=req.action, dry_run=False, request=body, response=result)
 
     def status(self, *, dry_run: bool = False) -> dict[str, Any]:
         return self._request(BridgeRequest("status", {}, dry_run=dry_run)).to_dict()
