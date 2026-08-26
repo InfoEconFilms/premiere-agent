@@ -1836,23 +1836,30 @@ function paRemoveEffectByName(raw) {
   return paJson({ ok: true, removed: removed, effect: effectName, clip_name: String(clip.name || '') });
 }
 
+// Empirically re-derived 2026-08-26 against a real Premiere build (26.3.2) by
+// compositing two known solid colors on overlapping tracks, sweeping every
+// value 0-27 on the first "Blend Mode" property, and matching the rendered
+// pixel color against each blend mode's expected formula (re-tested with the
+// two colors swapped top/bottom to disambiguate Darker Color from Dissolve,
+// since both are indistinguishable from Normal on a single solid-color test).
+// This is NOT the same order as the visual dropdown menu or the upstream
+// reference repo's guess (which this replaces) -- do not "fix" it back to a
+// sequential 1-27 mapping without re-verifying live first.
 var PA_BLEND_MODE_VALUES = {
-  'Normal': 1, 'Dissolve': 2, 'Darken': 3, 'Multiply': 4, 'Color Burn': 5,
-  'Linear Burn': 6, 'Darker Color': 7, 'Lighten': 8, 'Screen': 9, 'Color Dodge': 10,
-  'Linear Dodge': 11, 'Lighter Color': 12, 'Overlay': 13, 'Soft Light': 14,
-  'Hard Light': 15, 'Vivid Light': 16, 'Linear Light': 17, 'Pin Light': 18,
-  'Hard Mix': 19, 'Difference': 20, 'Exclusion': 21, 'Subtract': 22, 'Divide': 23,
-  'Hue': 24, 'Saturation': 25, 'Color': 26, 'Luminosity': 27
+  'Color': 0, 'Color Burn': 1, 'Color Dodge': 2, 'Darken': 3, 'Darker Color': 4,
+  'Difference': 5, 'Dissolve': 6, 'Exclusion': 7, 'Hard Light': 8, 'Hard Mix': 9,
+  'Hue': 10, 'Lighten': 11, 'Lighter Color': 12, 'Linear Burn': 13, 'Linear Dodge': 14,
+  'Linear Light': 15, 'Luminosity': 16, 'Multiply': 17, 'Normal': 18, 'Overlay': 19,
+  'Pin Light': 20, 'Saturation': 21, 'Screen': 22, 'Soft Light': 23, 'Vivid Light': 24,
+  'Subtract': 25, 'Divide': 26
 };
 
-// UNVERIFIED: the Opacity component exposes TWO distinct properties both
-// displayName === 'Blend Mode' on this Premiere build (26.3.2) — paFindProperty
-// returns only the first. Setting it to the value this map claims for
-// "Multiply" (4) visibly produced "Darker Color" in the UI instead (confirmed
-// live), so PA_BLEND_MODE_VALUES (ported verbatim from upstream) does not
-// reliably map onto this build's real enum, and it's unclear which of the two
-// same-named properties is the one actually driving compositing. Do not trust
-// this mapping until it's re-derived empirically against a real Premiere build.
+// The Opacity component exposes TWO distinct properties both displayName ===
+// 'Blend Mode' on this Premiere build; paFindProperty returns only the first
+// (index 1 in the properties collection), which live testing confirmed is the
+// one actually driving compositing -- the second (index 2, default value 0)
+// was tested and found inert. This is intentional, not a bug to "fix" by
+// picking the other one.
 function paSetBlendMode(raw) {
   var args = paParse(raw);
   var backupErr = paRequireBackup(args);
@@ -1862,7 +1869,7 @@ function paSetBlendMode(raw) {
   var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
   if (!clip) return paJson({ ok: false, error: 'Clip not found' });
   var blendModeName = String(args.blend_mode || 'Normal');
-  var modeValue = PA_BLEND_MODE_VALUES.hasOwnProperty(blendModeName) ? PA_BLEND_MODE_VALUES[blendModeName] : 1;
+  var modeValue = PA_BLEND_MODE_VALUES.hasOwnProperty(blendModeName) ? PA_BLEND_MODE_VALUES[blendModeName] : PA_BLEND_MODE_VALUES['Normal'];
   var comp = paFindComponent(clip, 'Opacity');
   if (!comp) return paJson({ ok: false, error: 'Opacity component not found on clip' });
   var prop = paFindProperty(comp, 'Blend Mode');
@@ -1876,8 +1883,7 @@ function paSetBlendMode(raw) {
     ok: true,
     blend_mode_requested: blendModeName,
     blend_mode_value_written: modeValue,
-    clip_name: String(clip.name || ''),
-    warning: 'UNVERIFIED: this build exposes two properties both named "Blend Mode" on Opacity; only the first was written, and confirmed live that value 4 ("Multiply" per this map) actually shows as "Darker Color" in the UI. Do not trust blend_mode_requested as the real visual result — check the Effect Controls panel.'
+    clip_name: String(clip.name || '')
   });
 }
 
