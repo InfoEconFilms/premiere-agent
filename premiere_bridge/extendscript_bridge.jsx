@@ -10,7 +10,22 @@
  */
 
 function paEscapeJsonString(value) {
-  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+  var s = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // Binary/blob property values (e.g. Lumetri LUT data) can contain raw control
+  // characters, which are invalid unescaped inside a JSON string literal.
+  return s.replace(/[\x00-\x1f]/g, function (ch) {
+    switch (ch) {
+      case '\b': return '\\b';
+      case '\f': return '\\f';
+      case '\n': return '\\n';
+      case '\r': return '\\r';
+      case '\t': return '\\t';
+      default:
+        var code = ch.charCodeAt(0).toString(16);
+        while (code.length < 4) code = '0' + code;
+        return '\\u' + code;
+    }
+  });
 }
 
 function paJsonValue(value) {
