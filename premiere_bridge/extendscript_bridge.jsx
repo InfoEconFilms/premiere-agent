@@ -2037,8 +2037,14 @@ function paGetColorSpace(raw) {
   var item = paFindProjectItem(String(args.item_id || ''));
   if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
   var info = { item: String(item.name || '') };
-  try { info.color_space = String(item.getColorSpace() || ''); } catch (e1) { info.color_space = 'unknown'; }
-  try { info.original_color_space = String(item.getOriginalColorSpace() || ''); } catch (e2) {}
+  try {
+    var cs = item.getColorSpace();
+    info.color_space = cs ? String(cs.name || cs) : '';
+  } catch (e1) { info.color_space = 'unknown'; }
+  try {
+    var ocs = item.getOriginalColorSpace();
+    info.original_color_space = ocs ? String(ocs.name || ocs) : '';
+  } catch (e2) {}
   try { info.embedded_lut = String(item.getEmbeddedLUTID() || ''); } catch (e3) {}
   try { info.input_lut = String(item.getInputLUTID() || ''); } catch (e4) {}
   return paJson({ ok: true, info: info });
