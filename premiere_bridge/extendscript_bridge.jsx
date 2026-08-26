@@ -1925,6 +1925,393 @@ function paCheckOfflineMedia(raw) {
   return paJson({ ok: true, offline_count: offlineItems.length, items: offlineItems });
 }
 
+function paGetMetadata(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var metadata = { name: String(item.name || ''), node_id: String(item.nodeId || '') };
+  try { metadata.project_metadata = String(item.getProjectMetadata() || ''); } catch (e1) {}
+  try { metadata.xmp_metadata = String(item.getXMPMetadata() || ''); } catch (e2) {}
+  try { metadata.media_path = String(item.getMediaPath() || ''); } catch (e3) {}
+  return paJson({ ok: true, metadata: metadata });
+}
+
+function paSetMetadata(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var fieldName = String(args.field_name || '');
+  var value = String(args.value || '');
+  try {
+    item.setProjectMetadata(value, [fieldName]);
+    return paJson({ ok: true, updated: true, item: String(item.name || ''), field: fieldName });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetColorLabel(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var colorIndex = Number(args.color_index);
+  try {
+    item.setColorLabel(colorIndex);
+    return paJson({ ok: true, updated: true, item: String(item.name || ''), color_index: colorIndex });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paGetColorLabel(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    var colorIndex = item.getColorLabel();
+    return paJson({ ok: true, item: String(item.name || ''), color_index: colorIndex });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paGetFootageInterpretation(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    var interp = item.getFootageInterpretation();
+    if (!interp) return paJson({ ok: false, error: 'No footage interpretation available' });
+    return paJson({
+      ok: true, item: String(item.name || ''),
+      alpha_usage: interp.alphaUsage, field_type: interp.fieldType, frame_rate: interp.frameRate,
+      ignore_alpha: !!interp.ignoreAlpha, invert_alpha: !!interp.invertAlpha, pixel_aspect_ratio: interp.pixelAspectRatio
+    });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetFootageInterpretation(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    var interp = item.getFootageInterpretation();
+    if (!interp) return paJson({ ok: false, error: 'No footage interpretation available' });
+    if (args.frame_rate !== undefined && args.frame_rate !== null) interp.frameRate = Number(args.frame_rate);
+    if (args.pixel_aspect_ratio !== undefined && args.pixel_aspect_ratio !== null) interp.pixelAspectRatio = Number(args.pixel_aspect_ratio);
+    item.setFootageInterpretation(interp);
+    return paJson({ ok: true, updated: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paGetXmpMetadata(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    var xmp = String(item.getXMPMetadata() || '');
+    return paJson({ ok: true, item: String(item.name || ''), xmp_metadata: xmp });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetXmpMetadata(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    item.setXMPMetadata(String(args.xmp_xml || ''));
+    return paJson({ ok: true, updated: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paGetColorSpace(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var info = { item: String(item.name || '') };
+  try { info.color_space = String(item.getColorSpace() || ''); } catch (e1) { info.color_space = 'unknown'; }
+  try { info.original_color_space = String(item.getOriginalColorSpace() || ''); } catch (e2) {}
+  try { info.embedded_lut = String(item.getEmbeddedLUTID() || ''); } catch (e3) {}
+  try { info.input_lut = String(item.getInputLUTID() || ''); } catch (e4) {}
+  return paJson({ ok: true, info: info });
+}
+
+function paImportMediaFiles(raw) {
+  var args = paParse(raw);
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var filePaths = args.file_paths;
+  if (!filePaths || !filePaths.length) return paJson({ ok: false, error: 'file_paths is required and must be non-empty' });
+  var targetBin = app.project.rootItem;
+  if (args.target_bin) {
+    targetBin = paFindProjectItem(String(args.target_bin));
+    if (!targetBin) return paJson({ ok: false, error: 'Bin not found: ' + String(args.target_bin) });
+  }
+  var suppressUi = args.suppress_ui !== false;
+  var paths = [];
+  for (var i = 0; i < filePaths.length; i += 1) paths.push(String(filePaths[i]));
+  try {
+    var success = app.project.importFiles(paths, suppressUi, targetBin, false);
+    if (!success) return paJson({ ok: false, error: 'Import failed' });
+    return paJson({ ok: true, imported: paths.length, files: paths });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paImportFolder(raw) {
+  var args = paParse(raw);
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var folderPath = String(args.folder_path || '');
+  var folder = new Folder(folderPath);
+  if (!folder.exists) return paJson({ ok: false, error: 'Folder not found: ' + folderPath });
+  var files = folder.getFiles();
+  var filePaths = [];
+  for (var i = 0; i < files.length; i += 1) {
+    if (files[i] instanceof File) filePaths.push(files[i].fsName);
+  }
+  if (!filePaths.length) return paJson({ ok: false, error: 'No files found in folder' });
+  try {
+    var success = app.project.importFiles(filePaths, true, app.project.rootItem, false);
+    if (!success) return paJson({ ok: false, error: 'Import failed' });
+    return paJson({ ok: true, imported: filePaths.length, folder: folderPath });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paRelinkMedia(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var newPath = String(args.new_path || '');
+  try {
+    var success = item.changeMediaPath(newPath, true);
+    return paJson({ ok: true, relinked: !!success, item: String(item.name || ''), new_path: newPath });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paRefreshMedia(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    item.refreshMedia();
+    return paJson({ ok: true, refreshed: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetOffline(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    item.setOffline();
+    return paJson({ ok: true, offline: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paHasProxy(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var info = { item: String(item.name || '') };
+  try { info.has_proxy = !!item.hasProxy(); } catch (e1) { info.has_proxy = false; }
+  try { info.can_proxy = !!item.canProxy(); } catch (e2) { info.can_proxy = false; }
+  try { info.proxy_path = String(item.getProxyPath() || ''); } catch (e3) {}
+  return paJson({ ok: true, info: info });
+}
+
+function paDetachProxy(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    item.detachProxy();
+    return paJson({ ok: true, detached: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetOverrideFrameRate(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var frameRate = Number(args.frame_rate);
+  try {
+    item.setOverrideFrameRate(frameRate);
+    return paJson({ ok: true, set: true, item: String(item.name || ''), frame_rate: frameRate });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetOverridePixelAspectRatio(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var numerator = Number(args.numerator);
+  var denominator = Number(args.denominator);
+  try {
+    item.setOverridePixelAspectRatio(numerator, denominator);
+    return paJson({ ok: true, set: true, item: String(item.name || ''), par: numerator + ':' + denominator });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetScaleToFrameSize(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    item.setScaleToFrameSize();
+    return paJson({ ok: true, set: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetStartTime(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var startSeconds = Number(args.start_seconds || 0);
+  try {
+    var ticks = paSecondsToTicks(startSeconds).toString();
+    item.setStartTime(ticks);
+    return paJson({ ok: true, set: true, item: String(item.name || ''), start_seconds: startSeconds });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paOpenInSource(raw) {
+  var args = paParse(raw);
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    app.sourceMonitor.openProjectItem(item);
+    return paJson({ ok: true, opened: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paCloseSourceMonitor(raw) {
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  try {
+    app.sourceMonitor.closeClip();
+    return paJson({ ok: true, closed: true });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paCloseAllSourceClips(raw) {
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  try {
+    app.sourceMonitor.closeAllClips();
+    return paJson({ ok: true, closed: true });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetSourceInOut(raw) {
+  var args = paParse(raw);
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var item = null;
+  try { item = app.sourceMonitor.getProjectItem(); } catch (e0) {}
+  if (!item) return paJson({ ok: false, error: 'No clip open in Source Monitor' });
+  var inSet = false;
+  var outSet = false;
+  try {
+    if (args.in_seconds !== undefined && args.in_seconds !== null) {
+      var inTime = new Time();
+      inTime.seconds = Number(args.in_seconds);
+      item.setInPoint(inTime.ticks, 4);
+      inSet = true;
+    }
+    if (args.out_seconds !== undefined && args.out_seconds !== null) {
+      var outTime = new Time();
+      outTime.seconds = Number(args.out_seconds);
+      item.setOutPoint(outTime.ticks, 4);
+      outSet = true;
+    }
+    return paJson({ ok: true, item: String(item.name || ''), in_set: inSet, out_set: outSet });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paInsertFromSource(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var item = null;
+  try { item = app.sourceMonitor.getProjectItem(); } catch (e0) {}
+  if (!item) return paJson({ ok: false, error: 'No clip open in Source Monitor' });
+  var vTrack = args.video_track_index !== undefined && args.video_track_index !== null ? Number(args.video_track_index) : 0;
+  var aTrack = args.audio_track_index !== undefined && args.audio_track_index !== null ? Number(args.audio_track_index) : 0;
+  try {
+    var pos = seq.getPlayerPosition().ticks;
+    seq.insertClip(item, pos, vTrack, aTrack);
+    return paJson({ ok: true, inserted: true, item: String(item.name || ''), at_seconds: paTicksToSeconds(pos) });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paOverwriteFromSource(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var item = null;
+  try { item = app.sourceMonitor.getProjectItem(); } catch (e0) {}
+  if (!item) return paJson({ ok: false, error: 'No clip open in Source Monitor' });
+  var vTrack = args.video_track_index !== undefined && args.video_track_index !== null ? Number(args.video_track_index) : 0;
+  var aTrack = args.audio_track_index !== undefined && args.audio_track_index !== null ? Number(args.audio_track_index) : 0;
+  try {
+    var pos = seq.getPlayerPosition().ticks;
+    seq.overwriteClip(item, pos, vTrack, aTrack);
+    return paJson({ ok: true, overwritten: true, item: String(item.name || ''), at_seconds: paTicksToSeconds(pos) });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paGetSourceMonitorInfo(raw) {
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var item = null;
+  try { item = app.sourceMonitor.getProjectItem(); } catch (e0) {}
+  if (!item) return paJson({ ok: true, loaded: false });
+  var info = { loaded: true, node_id: String(item.nodeId || ''), name: String(item.name || '') };
+  try { info.media_path = String(item.getMediaPath() || ''); } catch (e1) {}
+  try { info.in_point = paTicksToSeconds(item.getInPoint().ticks); } catch (e2) {}
+  try { info.out_point = paTicksToSeconds(item.getOutPoint().ticks); } catch (e3) {}
+  return paJson({ ok: true, info: info });
+}
+
 function paInspectDomObject(raw) {
   var args = paParse(raw);
   var objectPath = String(args.object_path || '');

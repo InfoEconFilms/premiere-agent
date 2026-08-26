@@ -542,6 +542,187 @@ class PremiereLiveBridge:
     def check_offline_media(self, *, dry_run: bool = False) -> dict[str, Any]:
         return self._request(BridgeRequest("check_offline_media", {}, dry_run=dry_run)).to_dict()
 
+    def get_metadata(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_metadata", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def set_metadata(
+        self, item_id: str, field_name: str, value: str, *, confirm: bool = False, dry_run: bool = False
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_metadata", confirm)
+        payload = {"item_id": item_id, "field_name": field_name, "value": value}
+        return self._request(BridgeRequest("set_metadata", payload, dry_run=dry_run)).to_dict()
+
+    def set_color_label(
+        self, item_id: str, color_index: int, *, confirm: bool = False, dry_run: bool = False
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_color_label", confirm)
+        payload = {"item_id": item_id, "color_index": int(color_index)}
+        return self._request(BridgeRequest("set_color_label", payload, dry_run=dry_run)).to_dict()
+
+    def get_color_label(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_color_label", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def get_footage_interpretation(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_footage_interpretation", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def set_footage_interpretation(
+        self,
+        item_id: str,
+        *,
+        frame_rate: float | None = None,
+        pixel_aspect_ratio: float | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_footage_interpretation", confirm)
+        payload = {"item_id": item_id, "frame_rate": frame_rate, "pixel_aspect_ratio": pixel_aspect_ratio}
+        return self._request(BridgeRequest("set_footage_interpretation", payload, dry_run=dry_run)).to_dict()
+
+    def get_xmp_metadata(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_xmp_metadata", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def set_xmp_metadata(
+        self, item_id: str, xmp_xml: str, *, confirm: bool = False, dry_run: bool = False
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_xmp_metadata", confirm)
+        payload = {"item_id": item_id, "xmp_xml": xmp_xml}
+        return self._request(BridgeRequest("set_xmp_metadata", payload, dry_run=dry_run)).to_dict()
+
+    def get_color_space(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_color_space", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def import_media_files(
+        self,
+        file_paths: list[str],
+        *,
+        target_bin: str | None = None,
+        suppress_ui: bool = True,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("import_media_files", confirm)
+        payload = {"file_paths": list(file_paths), "target_bin": target_bin, "suppress_ui": suppress_ui}
+        return self._request(BridgeRequest("import_media_files", payload, dry_run=dry_run)).to_dict()
+
+    def import_folder(self, folder_path: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("import_folder", confirm)
+        return self._request(BridgeRequest("import_folder", {"folder_path": folder_path}, dry_run=dry_run)).to_dict()
+
+    def relink_media(self, item_id: str, new_path: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("relink_media", confirm)
+        payload = {"item_id": item_id, "new_path": new_path}
+        return self._request(BridgeRequest("relink_media", payload, dry_run=dry_run)).to_dict()
+
+    def refresh_media(self, item_id: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("refresh_media", confirm)
+        return self._request(BridgeRequest("refresh_media", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def set_offline(self, item_id: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_offline", confirm)
+        return self._request(BridgeRequest("set_offline", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def has_proxy(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("has_proxy", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def detach_proxy(self, item_id: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("detach_proxy", confirm)
+        return self._request(BridgeRequest("detach_proxy", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def set_override_frame_rate(
+        self, item_id: str, frame_rate: float, *, confirm: bool = False, dry_run: bool = False
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_override_frame_rate", confirm)
+        payload = {"item_id": item_id, "frame_rate": frame_rate}
+        return self._request(BridgeRequest("set_override_frame_rate", payload, dry_run=dry_run)).to_dict()
+
+    def set_override_pixel_aspect_ratio(
+        self, item_id: str, numerator: float, denominator: float, *, confirm: bool = False, dry_run: bool = False
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_override_pixel_aspect_ratio", confirm)
+        payload = {"item_id": item_id, "numerator": numerator, "denominator": denominator}
+        return self._request(BridgeRequest("set_override_pixel_aspect_ratio", payload, dry_run=dry_run)).to_dict()
+
+    def set_scale_to_frame_size(self, item_id: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_scale_to_frame_size", confirm)
+        return self._request(BridgeRequest("set_scale_to_frame_size", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def set_start_time(
+        self, item_id: str, start_seconds: float, *, confirm: bool = False, dry_run: bool = False
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_start_time", confirm)
+        payload = {"item_id": item_id, "start_seconds": start_seconds}
+        return self._request(BridgeRequest("set_start_time", payload, dry_run=dry_run)).to_dict()
+
+    def open_in_source(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("open_in_source", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def close_source_monitor(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("close_source_monitor", {}, dry_run=dry_run)).to_dict()
+
+    def close_all_source_clips(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("close_all_source_clips", {}, dry_run=dry_run)).to_dict()
+
+    def set_source_in_out(
+        self, *, in_seconds: float | None = None, out_seconds: float | None = None, dry_run: bool = False
+    ) -> dict[str, Any]:
+        payload = {"in_seconds": in_seconds, "out_seconds": out_seconds}
+        return self._request(BridgeRequest("set_source_in_out", payload, dry_run=dry_run)).to_dict()
+
+    def insert_from_source(
+        self,
+        sequence_id: str,
+        *,
+        video_track_index: int = 0,
+        audio_track_index: int = 0,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("insert_from_source", confirm)
+            _require_backup("insert_from_source", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id,
+            "video_track_index": int(video_track_index), "audio_track_index": int(audio_track_index),
+        }
+        return self._request(BridgeRequest("insert_from_source", payload, dry_run=dry_run)).to_dict()
+
+    def overwrite_from_source(
+        self,
+        sequence_id: str,
+        *,
+        video_track_index: int = 0,
+        audio_track_index: int = 0,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("overwrite_from_source", confirm)
+            _require_backup("overwrite_from_source", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id,
+            "video_track_index": int(video_track_index), "audio_track_index": int(audio_track_index),
+        }
+        return self._request(BridgeRequest("overwrite_from_source", payload, dry_run=dry_run)).to_dict()
+
+    def get_source_monitor_info(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_source_monitor_info", {}, dry_run=dry_run)).to_dict()
+
     def import_media(
         self,
         sequence_id: str,

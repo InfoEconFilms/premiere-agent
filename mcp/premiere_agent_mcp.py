@@ -481,6 +481,247 @@ def live_bridge_check_offline_media(*, bridge_url: str | None = None, dry_run: b
     return PremiereLiveBridge(bridge_url).check_offline_media(dry_run=dry_run)
 
 
+def live_bridge_get_metadata(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_metadata(item_id, dry_run=dry_run)
+
+
+def live_bridge_set_metadata(
+    item_id: str, field_name: str, value: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_metadata(item_id, field_name, value, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_color_label(
+    item_id: str, color_index: int, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_color_label(item_id, color_index, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_get_color_label(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_color_label(item_id, dry_run=dry_run)
+
+
+def live_bridge_get_footage_interpretation(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_footage_interpretation(item_id, dry_run=dry_run)
+
+
+def live_bridge_set_footage_interpretation(
+    item_id: str,
+    *,
+    frame_rate: float | None = None,
+    pixel_aspect_ratio: float | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_footage_interpretation(
+        item_id, frame_rate=frame_rate, pixel_aspect_ratio=pixel_aspect_ratio, confirm=confirm, dry_run=dry_run
+    )
+
+
+def live_bridge_get_xmp_metadata(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_xmp_metadata(item_id, dry_run=dry_run)
+
+
+def live_bridge_set_xmp_metadata(
+    item_id: str, xmp_xml: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_xmp_metadata(item_id, xmp_xml, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_get_color_space(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_color_space(item_id, dry_run=dry_run)
+
+
+def live_bridge_import_media_files(
+    file_paths: list[str],
+    *,
+    target_bin: str | None = None,
+    suppress_ui: bool = True,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).import_media_files(
+        file_paths, target_bin=target_bin, suppress_ui=suppress_ui, confirm=confirm, dry_run=dry_run
+    )
+
+
+def live_bridge_import_folder(
+    folder_path: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).import_folder(folder_path, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_relink_media(
+    item_id: str, new_path: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).relink_media(item_id, new_path, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_refresh_media(
+    item_id: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).refresh_media(item_id, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_offline(
+    item_id: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_offline(item_id, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_has_proxy(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).has_proxy(item_id, dry_run=dry_run)
+
+
+def live_bridge_detach_proxy(
+    item_id: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).detach_proxy(item_id, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_override_frame_rate(
+    item_id: str, frame_rate: float, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_override_frame_rate(item_id, frame_rate, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_override_pixel_aspect_ratio(
+    item_id: str,
+    numerator: float,
+    denominator: float,
+    *,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_override_pixel_aspect_ratio(
+        item_id, numerator, denominator, confirm=confirm, dry_run=dry_run
+    )
+
+
+def live_bridge_set_scale_to_frame_size(
+    item_id: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_scale_to_frame_size(item_id, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_start_time(
+    item_id: str, start_seconds: float, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_start_time(item_id, start_seconds, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_open_in_source(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).open_in_source(item_id, dry_run=dry_run)
+
+
+def live_bridge_close_source_monitor(*, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).close_source_monitor(dry_run=dry_run)
+
+
+def live_bridge_close_all_source_clips(*, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).close_all_source_clips(dry_run=dry_run)
+
+
+def live_bridge_set_source_in_out(
+    *, in_seconds: float | None = None, out_seconds: float | None = None, bridge_url: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_source_in_out(in_seconds=in_seconds, out_seconds=out_seconds, dry_run=dry_run)
+
+
+def live_bridge_insert_from_source(
+    sequence_id: str,
+    *,
+    video_track_index: int = 0,
+    audio_track_index: int = 0,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).insert_from_source(
+        sequence_id,
+        video_track_index=video_track_index,
+        audio_track_index=audio_track_index,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_overwrite_from_source(
+    sequence_id: str,
+    *,
+    video_track_index: int = 0,
+    audio_track_index: int = 0,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).overwrite_from_source(
+        sequence_id,
+        video_track_index=video_track_index,
+        audio_track_index=audio_track_index,
+        backup_sequence_id=backup_sequence_id,
+        confirm=confirm,
+        dry_run=dry_run,
+    )
+
+
+def live_bridge_get_source_monitor_info(*, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_source_monitor_info(dry_run=dry_run)
+
+
+_RECOVERY_UNSAVED_CHANGES_REASON = "Premiere's documented scripting APIs do not expose the current dirty/unsaved flag."
+_RECOVERY_AUTO_SAVE_DIR_NAMES = ("Adobe Premiere Pro Auto-Save", "Premiere Pro Auto-Save")
+
+
+def live_bridge_inspect_project_recovery(*, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    """Read-only: list candidate .prproj auto-save/backup files for the open project.
+
+    Never opens or restores anything -- see automatic_restore_supported below.
+    """
+    if dry_run:
+        return {"ok": True, "dry_run": True}
+    path_resp = PremiereLiveBridge(bridge_url).evaluate_expression("app.project.path", dry_run=False)
+    inner = path_resp.get("response", {})
+    if not path_resp.get("ok") or not inner.get("ok"):
+        return {"ok": False, "error": inner.get("error") or "Could not read app.project.path"}
+    project_path_str = inner.get("value")
+    if not project_path_str:
+        return {"ok": False, "error": "No project is currently open"}
+    project_path = Path(project_path_str)
+    stem = project_path.stem
+    project_dir = project_path.parent
+    candidate_dirs = [project_dir] + [project_dir / name for name in _RECOVERY_AUTO_SAVE_DIR_NAMES]
+    candidates: list[dict[str, Any]] = []
+    for directory in candidate_dirs:
+        if not directory.is_dir():
+            continue
+        for f in directory.glob("*.prproj"):
+            if not f.is_file() or not f.name.startswith(stem):
+                continue
+            try:
+                stat = f.stat()
+            except OSError:
+                continue
+            candidates.append({"path": str(f), "directory": str(directory), "modified_epoch_s": stat.st_mtime, "size_bytes": stat.st_size})
+    candidates.sort(key=lambda c: c["modified_epoch_s"], reverse=True)
+    return {
+        "ok": True,
+        "project_path": str(project_path),
+        "candidates": candidates,
+        "unsaved_changes": {"reason": _RECOVERY_UNSAVED_CHANGES_REASON},
+        "recovery": {
+            "automatic_restore_supported": False,
+            "guidance": "This tool only lists candidate files, newest first. To restore, use Premiere's File > Open Recent or File > Open manually.",
+        },
+    }
+
+
 def live_bridge_move_clip(
     sequence_id: str,
     track_type: str,
@@ -895,6 +1136,146 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Read-only: recursively scan the project for offline (missing) media items.",
         "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
         "handler": lambda a: live_bridge_check_offline_media(bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_metadata": {
+        "description": "Read-only: get project and XMP metadata for a project item.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_get_metadata(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_metadata": {
+        "description": "Set a project metadata field (e.g. 'Column.Intrinsic.Description') on a project item. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "field_name": {"type": "string"}, "value": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "field_name", "value"]},
+        "handler": lambda a: live_bridge_set_metadata(a["item_id"], a["field_name"], a["value"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_color_label": {
+        "description": "Set the Project panel color label on an item (0=Violet, 1=Iris, 2=Caribbean, 3=Lavender, 4=Cerulean, 5=Forest, 6=Rose, 7=Mango, 8=Purple, 9=Blue, 10=Teal, 11=Magenta, 12=Tan, 13=Green, 14=Brown, 15=Yellow). Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "color_index": {"type": "integer", "minimum": 0, "maximum": 15}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "color_index"]},
+        "handler": lambda a: live_bridge_set_color_label(a["item_id"], a["color_index"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_color_label": {
+        "description": "Read-only: get a project item's color label index.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_get_color_label(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_footage_interpretation": {
+        "description": "Read-only: get footage interpretation (frame rate, pixel aspect ratio, alpha, field type) for a project item.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_get_footage_interpretation(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_footage_interpretation": {
+        "description": "Override footage interpretation (frame rate and/or pixel aspect ratio) for a project item. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "frame_rate": {"type": "number"}, "pixel_aspect_ratio": {"type": "number"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_set_footage_interpretation(a["item_id"], frame_rate=a.get("frame_rate"), pixel_aspect_ratio=a.get("pixel_aspect_ratio"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_xmp_metadata": {
+        "description": "Read-only: get the raw XMP metadata blob (EXIF/IPTC/Dublin Core, etc.) for a project item.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_get_xmp_metadata(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_xmp_metadata": {
+        "description": "Overwrite the entire XMP metadata blob on a project item with a complete XMP XML string. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "xmp_xml": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "xmp_xml"]},
+        "handler": lambda a: live_bridge_set_xmp_metadata(a["item_id"], a["xmp_xml"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_color_space": {
+        "description": "Read-only: get color space, original color space, and embedded/input LUT IDs for a project item.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_get_color_space(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_import_media_files": {
+        "description": "Bulk-import one or more media files into the project (a bin, not the timeline). Distinct from premiere_agent_import_media, which inserts a single file into a sequence. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"file_paths": {"type": "array", "items": {"type": "string"}}, "target_bin": {"type": "string"}, "suppress_ui": {"type": "boolean", "default": True}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["file_paths"]},
+        "handler": lambda a: live_bridge_import_media_files(a["file_paths"], target_bin=a.get("target_bin"), suppress_ui=a.get("suppress_ui", True), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_import_folder": {
+        "description": "Import every file in a folder into the project root bin. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"folder_path": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["folder_path"]},
+        "handler": lambda a: live_bridge_import_folder(a["folder_path"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_relink_media": {
+        "description": "Relink an offline project item to a new file path. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "new_path": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "new_path"]},
+        "handler": lambda a: live_bridge_relink_media(a["item_id"], a["new_path"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_refresh_media": {
+        "description": "Refresh a project item to pick up changes to its source file on disk. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_refresh_media(a["item_id"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_offline": {
+        "description": "Force a project item to offline status (unlinks its media). Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_set_offline(a["item_id"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_has_proxy": {
+        "description": "Read-only: whether a project item has/can have a proxy, and its proxy path.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_has_proxy(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_detach_proxy": {
+        "description": "Detach/remove the proxy from a project item. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_detach_proxy(a["item_id"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_override_frame_rate": {
+        "description": "Override the interpreted frame rate of a project item (e.g. for image sequences or misinterpreted media). Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "frame_rate": {"type": "number"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "frame_rate"]},
+        "handler": lambda a: live_bridge_set_override_frame_rate(a["item_id"], a["frame_rate"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_override_pixel_aspect_ratio": {
+        "description": "Override the pixel aspect ratio of a project item (1:1 = square pixels). Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "numerator": {"type": "number"}, "denominator": {"type": "number"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "numerator", "denominator"]},
+        "handler": lambda a: live_bridge_set_override_pixel_aspect_ratio(a["item_id"], a["numerator"], a["denominator"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_scale_to_frame_size": {
+        "description": "Enable 'Scale to Frame Size' on a project item so it fills the sequence frame. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_set_scale_to_frame_size(a["item_id"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_start_time": {
+        "description": "Set the start-time (timecode offset) of a project item. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "start_seconds": {"type": "number"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "start_seconds"]},
+        "handler": lambda a: live_bridge_set_start_time(a["item_id"], a["start_seconds"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_open_in_source": {
+        "description": "Open a project item in the Source Monitor for preview/trimming. UI state, not a structural mutation.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_open_in_source(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_close_source_monitor": {
+        "description": "Close the clip currently open in the Source Monitor. UI state, not a structural mutation.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_close_source_monitor(bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_close_all_source_clips": {
+        "description": "Close all clips in the Source Monitor. UI state, not a structural mutation.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_close_all_source_clips(bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_source_in_out": {
+        "description": "Set in and/or out points on the clip currently open in the Source Monitor. UI state, not a structural mutation.",
+        "inputSchema": {"type": "object", "properties": {"in_seconds": {"type": "number"}, "out_seconds": {"type": "number"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_set_source_in_out(in_seconds=a.get("in_seconds"), out_seconds=a.get("out_seconds"), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_insert_from_source": {
+        "description": "Insert edit: insert the clip currently open in the Source Monitor into a sequence at the playhead (shifts existing clips). Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "video_track_index": {"type": "integer", "default": 0}, "audio_track_index": {"type": "integer", "default": 0}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_insert_from_source(a["sequence_id"], video_track_index=a.get("video_track_index", 0), audio_track_index=a.get("audio_track_index", 0), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_overwrite_from_source": {
+        "description": "Overwrite edit: overwrite into a sequence at the playhead with the clip currently open in the Source Monitor (replaces existing clips, does not shift). Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "video_track_index": {"type": "integer", "default": 0}, "audio_track_index": {"type": "integer", "default": 0}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_overwrite_from_source(a["sequence_id"], video_track_index=a.get("video_track_index", 0), audio_track_index=a.get("audio_track_index", 0), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_source_monitor_info": {
+        "description": "Read-only: info about the clip currently loaded in the Source Monitor (name, media path, in/out points).",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_get_source_monitor_info(bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_inspect_project_recovery": {
+        "description": "Read-only: list candidate .prproj auto-save/backup files for the currently open project (project directory + Adobe/Premiere Pro Auto-Save subfolders), newest first. Cannot report unsaved-changes state (not exposed by Premiere's scripting API) and never restores anything automatically -- restoring is always a manual File > Open in Premiere.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_inspect_project_recovery(bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_move_clip": {
         "description": "Copy a clip onto a different track (e.g. onto a separate camera track for multicam layout) via Track.insertClip. By default the original is left in place (remove_original=false) since TrackItem removal is unproven on this Premiere build; only set remove_original=true after confirming the copy looks correct. Requires confirm=true and backup_sequence_id.",
