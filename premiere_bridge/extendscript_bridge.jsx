@@ -1771,6 +1771,160 @@ function paSetBlendMode(raw) {
   });
 }
 
+// Project/bin/item management: all public documented DOM.
+function paSaveProject(raw) {
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  try {
+    app.project.save();
+    return paJson({ ok: true, saved: true, name: String(app.project.name || ''), path: String(app.project.path || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paUndo(raw) {
+  var args = paParse(raw);
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var count = Number(args.count || 1);
+  try {
+    for (var i = 0; i < count; i += 1) app.project.undo();
+    return paJson({ ok: true, undone: count });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paSetActiveSequence(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  try {
+    app.project.activeSequence = seq;
+    return paJson({ ok: true, active: true, name: String(seq.name || ''), id: paSequenceId(seq) });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paCreateBin(raw) {
+  var args = paParse(raw);
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var name = String(args.name || '');
+  if (!name) return paJson({ ok: false, error: 'name is required' });
+  var parent = app.project.rootItem;
+  if (args.parent_bin) {
+    parent = paFindProjectItem(String(args.parent_bin));
+    if (!parent) return paJson({ ok: false, error: 'Parent bin not found: ' + String(args.parent_bin) });
+  }
+  try {
+    var newBin = parent.createBin(name);
+    return paJson({ ok: true, created: true, name: name, node_id: String(newBin.nodeId || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paDeleteBin(raw) {
+  var args = paParse(raw);
+  var bin = paFindProjectItem(String(args.bin_id || ''));
+  if (!bin) return paJson({ ok: false, error: 'Bin not found: ' + String(args.bin_id || '') });
+  if (bin.type !== 2) return paJson({ ok: false, error: 'Item is not a bin' });
+  var name = String(bin.name || '');
+  try {
+    bin.deleteBin();
+    return paJson({ ok: true, deleted: true, name: name });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paRenameBin(raw) {
+  var args = paParse(raw);
+  var bin = paFindProjectItem(String(args.bin_id || ''));
+  if (!bin) return paJson({ ok: false, error: 'Bin not found: ' + String(args.bin_id || '') });
+  if (bin.type !== 2) return paJson({ ok: false, error: 'Item is not a bin' });
+  var oldName = String(bin.name || '');
+  var newName = String(args.new_name || '');
+  try {
+    bin.renameBin(newName);
+    return paJson({ ok: true, renamed: true, old_name: oldName, new_name: newName });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paMoveItemToBin(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var targetBin = paFindProjectItem(String(args.target_bin || ''));
+  if (!targetBin) return paJson({ ok: false, error: 'Target bin not found: ' + String(args.target_bin || '') });
+  try {
+    item.moveBin(targetBin);
+    return paJson({ ok: true, moved: true, item: String(item.name || ''), to_bin: String(targetBin.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paGetItemInfo(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  var info = {
+    name: String(item.name || ''),
+    node_id: String(item.nodeId || ''),
+    type: item.type === 1 ? 'clip' : (item.type === 2 ? 'bin' : (item.type === 3 ? 'sequence' : 'unknown')),
+    tree_path: String(item.treePath || '')
+  };
+  try { info.is_sequence = !!item.isSequence(); } catch (e1) {}
+  try { info.is_multicam_clip = !!item.isMulticamClip(); } catch (e2) {}
+  try { info.is_merged_clip = !!item.isMergedClip(); } catch (e3) {}
+  try { info.is_offline = !!item.isOffline(); } catch (e4) {}
+  try { info.media_path = String(item.getMediaPath() || ''); } catch (e5) {}
+  try { info.has_proxy = !!item.hasProxy(); } catch (e6) {}
+  try { info.can_proxy = !!item.canProxy(); } catch (e7) {}
+  return paJson({ ok: true, item: info });
+}
+
+function paSelectItem(raw) {
+  var args = paParse(raw);
+  var item = paFindProjectItem(String(args.item_id || ''));
+  if (!item) return paJson({ ok: false, error: 'Item not found: ' + String(args.item_id || '') });
+  try {
+    item.select();
+    return paJson({ ok: true, selected: true, item: String(item.name || '') });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paCheckOfflineMedia(raw) {
+  if (!paHasApp()) return paJson({ ok: false, error: 'Premiere project unavailable' });
+  var offlineItems = [];
+  function checkItem(item) {
+    if (item.type === 1) {
+      try {
+        if (item.isOffline && item.isOffline()) {
+          var mediaPath = '';
+          try { mediaPath = String(item.getMediaPath() || ''); } catch (mpErr) {}
+          offlineItems.push({ node_id: String(item.nodeId || ''), name: String(item.name || ''), media_path: mediaPath });
+        }
+      } catch (err) {}
+    }
+    if (item.type === 2 && item.children) {
+      for (var i = 0; i < item.children.numItems; i += 1) checkItem(item.children[i]);
+    }
+  }
+  try {
+    var root = app.project.rootItem;
+    for (var i = 0; i < root.children.numItems; i += 1) checkItem(root.children[i]);
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, offline_count: offlineItems.length, items: offlineItems });
+}
+
 function paInspectDomObject(raw) {
   var args = paParse(raw);
   var objectPath = String(args.object_path || '');

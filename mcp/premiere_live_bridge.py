@@ -500,6 +500,48 @@ class PremiereLiveBridge:
         }
         return self._request(BridgeRequest("set_blend_mode", payload, dry_run=dry_run)).to_dict()
 
+    def save_project(self, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("save_project", confirm)
+        return self._request(BridgeRequest("save_project", {}, dry_run=dry_run)).to_dict()
+
+    def undo(self, *, count: int = 1, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("undo", confirm)
+        return self._request(BridgeRequest("undo", {"count": int(count)}, dry_run=dry_run)).to_dict()
+
+    def set_active_sequence(self, sequence_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("set_active_sequence", {"sequence_id": sequence_id}, dry_run=dry_run)).to_dict()
+
+    def create_bin(self, name: str, *, parent_bin: str | None = None, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("create_bin", confirm)
+        return self._request(BridgeRequest("create_bin", {"name": name, "parent_bin": parent_bin}, dry_run=dry_run)).to_dict()
+
+    def delete_bin(self, bin_id: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("delete_bin", confirm)
+        return self._request(BridgeRequest("delete_bin", {"bin_id": bin_id}, dry_run=dry_run)).to_dict()
+
+    def rename_bin(self, bin_id: str, new_name: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("rename_bin", confirm)
+        return self._request(BridgeRequest("rename_bin", {"bin_id": bin_id, "new_name": new_name}, dry_run=dry_run)).to_dict()
+
+    def move_item_to_bin(self, item_id: str, target_bin: str, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("move_item_to_bin", confirm)
+        return self._request(BridgeRequest("move_item_to_bin", {"item_id": item_id, "target_bin": target_bin}, dry_run=dry_run)).to_dict()
+
+    def get_item_info(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("get_item_info", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def select_item(self, item_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("select_item", {"item_id": item_id}, dry_run=dry_run)).to_dict()
+
+    def check_offline_media(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return self._request(BridgeRequest("check_offline_media", {}, dry_run=dry_run)).to_dict()
+
     def import_media(
         self,
         sequence_id: str,

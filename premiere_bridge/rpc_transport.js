@@ -53,7 +53,17 @@
     select_disabled_clips: 'paSelectDisabledClips',
     copy_effect_values: 'paCopyEffectValues',
     remove_effect_by_name: 'paRemoveEffectByName',
-    set_blend_mode: 'paSetBlendMode'
+    set_blend_mode: 'paSetBlendMode',
+    save_project: 'paSaveProject',
+    undo: 'paUndo',
+    set_active_sequence: 'paSetActiveSequence',
+    create_bin: 'paCreateBin',
+    delete_bin: 'paDeleteBin',
+    rename_bin: 'paRenameBin',
+    move_item_to_bin: 'paMoveItemToBin',
+    get_item_info: 'paGetItemInfo',
+    select_item: 'paSelectItem',
+    check_offline_media: 'paCheckOfflineMedia'
   };
 
   function jsonRpcError(id, code, message) {

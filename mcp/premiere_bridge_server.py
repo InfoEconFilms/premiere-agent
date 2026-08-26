@@ -237,6 +237,51 @@ class MockPremiereBackend:
             raise JsonRpcError(-32602, "blend_mode is required")
         return {"ok": True, "blend_mode_requested": params["blend_mode"], "blend_mode_value_written": 1, "clip_name": "mock_clip", "warning": "UNVERIFIED mapping on real Premiere; mock backend does not model this."}
 
+    def save_project(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "saved": True, "name": self.project_name, "path": self.project_path}
+
+    def undo(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "undone": int(params.get("count") or 1)}
+
+    def set_active_sequence(self, params: dict[str, Any]) -> dict[str, Any]:
+        seq_id = str(params.get("sequence_id") or self.active_sequence_id)
+        seq = self._sequence(seq_id)
+        self.active_sequence_id = seq_id
+        return {"ok": True, "active": True, "name": seq["name"], "id": seq_id}
+
+    def create_bin(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("name"):
+            raise JsonRpcError(-32602, "name is required")
+        return {"ok": True, "created": True, "name": params["name"], "node_id": _slug(params["name"])}
+
+    def delete_bin(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("bin_id"):
+            raise JsonRpcError(-32602, "bin_id is required")
+        return {"ok": True, "deleted": True, "name": params["bin_id"]}
+
+    def rename_bin(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("bin_id") or not params.get("new_name"):
+            raise JsonRpcError(-32602, "bin_id and new_name are required")
+        return {"ok": True, "renamed": True, "old_name": params["bin_id"], "new_name": params["new_name"]}
+
+    def move_item_to_bin(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("item_id") or not params.get("target_bin"):
+            raise JsonRpcError(-32602, "item_id and target_bin are required")
+        return {"ok": True, "moved": True, "item": params["item_id"], "to_bin": params["target_bin"]}
+
+    def get_item_info(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("item_id"):
+            raise JsonRpcError(-32602, "item_id is required")
+        return {"ok": True, "item": {"name": params["item_id"], "node_id": _slug(params["item_id"]), "type": "clip", "tree_path": "", "is_offline": False}}
+
+    def select_item(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("item_id"):
+            raise JsonRpcError(-32602, "item_id is required")
+        return {"ok": True, "selected": True, "item": params["item_id"]}
+
+    def check_offline_media(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "offline_count": 0, "items": []}
+
     def move_clip(self, params: dict[str, Any]) -> dict[str, Any]:
         seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
         _require_backup(params)

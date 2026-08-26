@@ -1091,6 +1091,56 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge set_blend_mode", str(blend))
         else:
             R.ok("Premiere bridge set_blend_mode")
+        save_proj = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 60, "method": "save_project", "params": {}})
+        if not save_proj or not save_proj.get("result", {}).get("ok"):
+            R.fail("Premiere bridge save_project", str(save_proj))
+        else:
+            R.ok("Premiere bridge save_project")
+        undo_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 61, "method": "undo", "params": {"count": 1}})
+        if not undo_res or not undo_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge undo", str(undo_res))
+        else:
+            R.ok("Premiere bridge undo")
+        set_active = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 62, "method": "set_active_sequence", "params": {"sequence_id": "seq_main"}})
+        if not set_active or not set_active.get("result", {}).get("ok"):
+            R.fail("Premiere bridge set_active_sequence", str(set_active))
+        else:
+            R.ok("Premiere bridge set_active_sequence")
+        create_bin_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 63, "method": "create_bin", "params": {"name": "Test Bin"}})
+        if not create_bin_res or not create_bin_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge create_bin", str(create_bin_res))
+        else:
+            R.ok("Premiere bridge create_bin")
+        delete_bin_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 64, "method": "delete_bin", "params": {"bin_id": "Test Bin"}})
+        if not delete_bin_res or not delete_bin_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge delete_bin", str(delete_bin_res))
+        else:
+            R.ok("Premiere bridge delete_bin")
+        rename_bin_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 65, "method": "rename_bin", "params": {"bin_id": "Test Bin", "new_name": "Renamed Bin"}})
+        if not rename_bin_res or not rename_bin_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge rename_bin", str(rename_bin_res))
+        else:
+            R.ok("Premiere bridge rename_bin")
+        move_item_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 66, "method": "move_item_to_bin", "params": {"item_id": "clip1", "target_bin": "Renamed Bin"}})
+        if not move_item_res or not move_item_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge move_item_to_bin", str(move_item_res))
+        else:
+            R.ok("Premiere bridge move_item_to_bin")
+        item_info_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 67, "method": "get_item_info", "params": {"item_id": "clip1"}})
+        if not item_info_res or not item_info_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge get_item_info", str(item_info_res))
+        else:
+            R.ok("Premiere bridge get_item_info")
+        select_item_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 68, "method": "select_item", "params": {"item_id": "clip1"}})
+        if not select_item_res or not select_item_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge select_item", str(select_item_res))
+        else:
+            R.ok("Premiere bridge select_item")
+        offline_res = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 69, "method": "check_offline_media", "params": {}})
+        if not offline_res or not offline_res.get("result", {}).get("ok"):
+            R.fail("Premiere bridge check_offline_media", str(offline_res))
+        else:
+            R.ok("Premiere bridge check_offline_media")
         listed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 31, "method": "list_markers", "params": {"sequence_id": "seq_main"}})
         if not listed or listed.get("result", {}).get("marker_count") != 1 or listed.get("result", {}).get("verification", {}).get("mutates_project") is not False:
             R.fail("Premiere bridge marker listing", str(listed))

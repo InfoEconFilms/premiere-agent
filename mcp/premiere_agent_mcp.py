@@ -435,6 +435,52 @@ def live_bridge_set_blend_mode(
     return PremiereLiveBridge(bridge_url).set_blend_mode(sequence_id, track_type, track_index, clip_index, blend_mode, backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run)
 
 
+def live_bridge_save_project(*, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).save_project(confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_undo(*, count: int = 1, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).undo(count=count, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_set_active_sequence(sequence_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_active_sequence(sequence_id, dry_run=dry_run)
+
+
+def live_bridge_create_bin(
+    name: str, *, parent_bin: str | None = None, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).create_bin(name, parent_bin=parent_bin, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_delete_bin(bin_id: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).delete_bin(bin_id, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_rename_bin(
+    bin_id: str, new_name: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).rename_bin(bin_id, new_name, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_move_item_to_bin(
+    item_id: str, target_bin: str, *, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).move_item_to_bin(item_id, target_bin, confirm=confirm, dry_run=dry_run)
+
+
+def live_bridge_get_item_info(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_item_info(item_id, dry_run=dry_run)
+
+
+def live_bridge_select_item(item_id: str, *, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).select_item(item_id, dry_run=dry_run)
+
+
+def live_bridge_check_offline_media(*, bridge_url: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).check_offline_media(dry_run=dry_run)
+
+
 def live_bridge_move_clip(
     sequence_id: str,
     track_type: str,
@@ -799,6 +845,56 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "UNVERIFIED on Premiere 26.3.2: setting 'Multiply' was confirmed live to visually show as 'Darker Color' instead, and this build exposes two same-named 'Blend Mode' properties on Opacity, only the first of which is written. Do not trust the name->value mapping; check Effect Controls after calling. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "blend_mode": {"type": "string", "enum": ["Normal", "Dissolve", "Darken", "Multiply", "Color Burn", "Linear Burn", "Darker Color", "Lighten", "Screen", "Color Dodge", "Linear Dodge", "Lighter Color", "Overlay", "Soft Light", "Hard Light", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Difference", "Exclusion", "Subtract", "Divide", "Hue", "Saturation", "Color", "Luminosity"]}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "blend_mode"]},
         "handler": lambda a: live_bridge_set_blend_mode(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["blend_mode"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_save_project": {
+        "description": "Save the current Premiere project to disk. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_save_project(bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_undo": {
+        "description": "Undo the last action(s) in Premiere. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"count": {"type": "integer", "default": 1}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_undo(count=a.get("count", 1), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_active_sequence": {
+        "description": "Make a sequence active/focused. UI focus state, not a structural mutation, so no confirm gate.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id"]},
+        "handler": lambda a: live_bridge_set_active_sequence(a["sequence_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_create_bin": {
+        "description": "Create a new bin (folder) in the Project panel. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "parent_bin": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["name"]},
+        "handler": lambda a: live_bridge_create_bin(a["name"], parent_bin=a.get("parent_bin"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_delete_bin": {
+        "description": "Delete a bin from the Project panel by name or node ID. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"bin_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["bin_id"]},
+        "handler": lambda a: live_bridge_delete_bin(a["bin_id"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_rename_bin": {
+        "description": "Rename a bin. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"bin_id": {"type": "string"}, "new_name": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["bin_id", "new_name"]},
+        "handler": lambda a: live_bridge_rename_bin(a["bin_id"], a["new_name"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_move_item_to_bin": {
+        "description": "Move a project item into a different bin. Requires confirm=true.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "target_bin": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id", "target_bin"]},
+        "handler": lambda a: live_bridge_move_item_to_bin(a["item_id"], a["target_bin"], bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_item_info": {
+        "description": "Read-only: type/status info about a project item (sequence/multicam/merged-clip/offline/proxy/media path).",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_get_item_info(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_select_item": {
+        "description": "Select a project item in the Project panel. UI state, not a structural mutation.",
+        "inputSchema": {"type": "object", "properties": {"item_id": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["item_id"]},
+        "handler": lambda a: live_bridge_select_item(a["item_id"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_check_offline_media": {
+        "description": "Read-only: recursively scan the project for offline (missing) media items.",
+        "inputSchema": {"type": "object", "properties": {"bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}},
+        "handler": lambda a: live_bridge_check_offline_media(bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_move_clip": {
         "description": "Copy a clip onto a different track (e.g. onto a separate camera track for multicam layout) via Track.insertClip. By default the original is left in place (remove_original=false) since TrackItem removal is unproven on this Premiere build; only set remove_original=true after confirming the copy looks correct. Requires confirm=true and backup_sequence_id.",
