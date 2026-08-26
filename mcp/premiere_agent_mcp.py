@@ -435,6 +435,30 @@ def live_bridge_set_blend_mode(
     return PremiereLiveBridge(bridge_url).set_blend_mode(sequence_id, track_type, track_index, clip_index, blend_mode, backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run)
 
 
+def live_bridge_set_clip_transform(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int,
+    *, scale: float | None = None, position: list[float] | None = None, rotation: float | None = None,
+    range_start_s: float | None = None, range_end_s: float | None = None,
+    backup_sequence_id: str | None = None, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_clip_transform(
+        sequence_id, track_type, track_index, clip_index, scale=scale, position=position, rotation=rotation,
+        range_start_s=range_start_s, range_end_s=range_end_s,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
+def live_bridge_apply_basic_lumetri(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int,
+    *, look: str = "subtle_professional", intensity: float = 0.25,
+    backup_sequence_id: str | None = None, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).apply_basic_lumetri(
+        sequence_id, track_type, track_index, clip_index, look=look, intensity=intensity,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
 def live_bridge_save_project(*, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True) -> dict[str, Any]:
     return PremiereLiveBridge(bridge_url).save_project(confirm=confirm, dry_run=dry_run)
 
@@ -1086,6 +1110,16 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Set the blend mode on a clip's Opacity component. The name->value mapping was empirically re-derived live against Premiere 26.3.2 (it is NOT the visual dropdown order) — see extendscript_bridge.jsx's PA_BLEND_MODE_VALUES for how. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "blend_mode": {"type": "string", "enum": ["Normal", "Dissolve", "Darken", "Multiply", "Color Burn", "Linear Burn", "Darker Color", "Lighten", "Screen", "Color Dodge", "Linear Dodge", "Lighter Color", "Overlay", "Soft Light", "Hard Light", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Difference", "Exclusion", "Subtract", "Divide", "Hue", "Saturation", "Color", "Luminosity"]}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "blend_mode"]},
         "handler": lambda a: live_bridge_set_blend_mode(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["blend_mode"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_clip_transform": {
+        "description": "Set Scale/Position/Rotation on a clip's built-in Motion component. Position/Anchor Point read back as a normalized [0-1, 0-1] fraction of frame size (0.5,0.5 = center), not pixel coordinates. If range_start_s/range_end_s are given, adds keyframes at those times with the same value (isolating the change to that window) instead of a static value. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "scale": {"type": "number"}, "position": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "rotation": {"type": "number"}, "range_start_s": {"type": "number"}, "range_end_s": {"type": "number"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index"]},
+        "handler": lambda a: live_bridge_set_clip_transform(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], scale=a.get("scale"), position=a.get("position"), rotation=a.get("rotation"), range_start_s=a.get("range_start_s"), range_end_s=a.get("range_end_s"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_apply_basic_lumetri": {
+        "description": "Apply a named Lumetri Color look to a clip's Basic Correction sliders (Exposure/Contrast/Highlights/Shadows/Whites/Blacks/Saturation), scaled by intensity (0-1, default 0.25). Adds the Lumetri Color effect via the QE DOM if the clip doesn't already have it (target sequence must be the active sequence for this). Looks: subtle_professional, warm, cool, high_contrast, muted. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "look": {"type": "string", "enum": ["subtle_professional", "warm", "cool", "high_contrast", "muted"], "default": "subtle_professional"}, "intensity": {"type": "number", "default": 0.25}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index"]},
+        "handler": lambda a: live_bridge_apply_basic_lumetri(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], look=a.get("look", "subtle_professional"), intensity=a.get("intensity", 0.25), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_save_project": {
         "description": "Save the current Premiere project to disk. Requires confirm=true.",

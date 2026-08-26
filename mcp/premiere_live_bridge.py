@@ -500,6 +500,56 @@ class PremiereLiveBridge:
         }
         return self._request(BridgeRequest("set_blend_mode", payload, dry_run=dry_run)).to_dict()
 
+    def set_clip_transform(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        *,
+        scale: float | None = None,
+        position: list[float] | None = None,
+        rotation: float | None = None,
+        range_start_s: float | None = None,
+        range_end_s: float | None = None,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_clip_transform", confirm)
+            _require_backup("set_clip_transform", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index),
+            "scale": scale, "position": position, "rotation": rotation,
+            "range_start_s": range_start_s, "range_end_s": range_end_s,
+        }
+        return self._request(BridgeRequest("set_clip_transform", payload, dry_run=dry_run)).to_dict()
+
+    def apply_basic_lumetri(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        *,
+        look: str = "subtle_professional",
+        intensity: float = 0.25,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("apply_basic_lumetri", confirm)
+            _require_backup("apply_basic_lumetri", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index),
+            "look": look, "intensity": float(intensity),
+        }
+        return self._request(BridgeRequest("apply_basic_lumetri", payload, dry_run=dry_run)).to_dict()
+
     def save_project(self, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
         if not dry_run:
             _require_confirm("save_project", confirm)

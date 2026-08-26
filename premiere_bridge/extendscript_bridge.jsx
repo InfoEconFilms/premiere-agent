@@ -1124,18 +1124,160 @@ function paQueueExport(raw) {
   return paJson(result);
 }
 
+// Basic-Correction-block deltas (from neutral) for each named look, applied
+// scaled by `intensity` (0-1). Property collisions: Lumetri Color has ~130
+// properties and reuses names like "Saturation"/"Contrast"/"Temperature"
+// across sections (Basic Correction, Creative, Color Wheels & Match), so
+// paFindProperty's by-name lookup is unreliable here -- these are the fixed
+// property indices for the Basic Correction block's sliders, confirmed live
+// against a real "AE.ADBE Lumetri" component on Premiere 26.3.2.
+var PA_LUMETRI_BASIC_INDEX = { exposure: 19, contrast: 20, highlights: 21, shadows: 22, whites: 23, blacks: 24, saturation: 16, temperature: 14, tint: 15 };
+var PA_LUMETRI_LOOKS = {
+  'subtle_professional': { contrast: 8, highlights: -5, shadows: 5, saturation: 5 },
+  'warm': { temperature: 15, exposure: 2, saturation: 8 },
+  'cool': { temperature: -15, contrast: 5 },
+  'high_contrast': { contrast: 25, highlights: -10, shadows: -10, blacks: -5, whites: 5 },
+  'muted': { saturation: -40, contrast: -5 }
+};
+
 function paApplyBasicLumetri(raw) {
   var args = paParse(raw);
   var backupErr = paRequireBackup(args);
   if (backupErr) return paJson(backupErr);
-  return paJson({ ok: false, unsupported: true, requested_lumetri: args, message: 'Lumetri control requires clip/component traversal for the target Premiere version.' });
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+
+  var lookName = String(args.look || 'subtle_professional');
+  if (!PA_LUMETRI_LOOKS.hasOwnProperty(lookName)) {
+    return paJson({ ok: false, error: 'Unknown look: ' + lookName, available_looks: (function(){ var k=[]; for (var n in PA_LUMETRI_LOOKS) k.push(n); return k; })() });
+  }
+  var intensity = (args.intensity !== undefined && args.intensity !== null) ? Number(args.intensity) : 0.25;
+
+  var comp = paFindComponent(clip, 'Lumetri Color');
+  var added = false;
+  if (!comp) {
+    try {
+      app.enableQE();
+      var effect = qe.project.getVideoEffectByName('Lumetri Color', false);
+      if (!effect) return paJson({ ok: false, error: 'Lumetri Color effect not found via QE DOM' });
+      var qeSeq = qe.project.getActiveSequence();
+      if (!qeSeq || paSequenceId(seq) !== paSequenceId(app.project.activeSequence)) {
+        return paJson({ ok: false, error: 'Target sequence must be the active sequence to add a new effect via the QE DOM (adding effects to a non-active sequence is not supported).' });
+      }
+      var qeTrack = (String(args.track_type || 'video').toLowerCase() === 'audio') ? null : qeSeq.getVideoTrackAt(Number(args.track_index));
+      if (!qeTrack) return paJson({ ok: false, error: 'Lumetri Color only applies to video tracks' });
+      var qeItem = null;
+      var seen = 0;
+      for (var qi = 0; qi < qeTrack.numItems; qi += 1) {
+        var cand = qeTrack.getItemAt(qi);
+        var isEmpty = false;
+        try { isEmpty = (String(cand.type) === 'Empty'); } catch (typeErr) {}
+        if (isEmpty) continue;
+        if (seen === Number(args.clip_index)) { qeItem = cand; break; }
+        seen += 1;
+      }
+      if (!qeItem) return paJson({ ok: false, error: 'Could not resolve the target clip via the QE DOM' });
+      var addOk = qeItem.addVideoEffect(effect);
+      if (!addOk) return paJson({ ok: false, error: 'QE DOM declined to add Lumetri Color to this clip' });
+      added = true;
+      comp = paFindComponent(clip, 'Lumetri Color');
+      if (!comp) return paJson({ ok: false, error: 'Lumetri Color was reported added but is not visible on the clip afterward' });
+    } catch (addErr) {
+      return paJson({ ok: false, error: 'Failed to add Lumetri Color: ' + String(addErr) });
+    }
+  }
+
+  var deltas = PA_LUMETRI_LOOKS[lookName];
+  var applied = {};
+  var errors = [];
+  for (var key in deltas) {
+    if (!deltas.hasOwnProperty(key)) continue;
+    var propIndex = PA_LUMETRI_BASIC_INDEX[key];
+    var prop = null;
+    try { prop = comp.properties[propIndex]; } catch (idxErr) {}
+    if (!prop) { errors.push(key + ': property index unavailable'); continue; }
+    var neutral = (key === 'saturation') ? 100 : 0;
+    var newValue = neutral + (deltas[key] * intensity);
+    try {
+      prop.setValue(newValue, true);
+      applied[key] = newValue;
+    } catch (setErr) {
+      errors.push(key + ': ' + String(setErr));
+    }
+  }
+
+  return paJson({
+    ok: errors.length === 0,
+    clip_name: String(clip.name || ''),
+    look: lookName,
+    intensity: intensity,
+    effect_added: added,
+    applied: applied,
+    errors: errors,
+    verification: 'Premiere accepted the write(s); verify via get_effect_properties readback or exported frames before delivery.'
+  });
 }
 
 function paSetClipTransform(raw) {
   var args = paParse(raw);
   var backupErr = paRequireBackup(args);
   if (backupErr) return paJson(backupErr);
-  return paJson({ ok: false, unsupported: true, requested_transform: args, message: 'Transform control requires stable clip ids from snapshot_sequence and component traversal.' });
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var comp = paFindComponent(clip, 'Motion');
+  if (!comp) return paJson({ ok: false, error: 'Motion component not found on clip' });
+
+  var hasRange = args.range_start_s !== undefined && args.range_start_s !== null;
+  var applied = {};
+  var errors = [];
+
+  function applyProp(propName, value) {
+    var prop = paFindProperty(comp, propName);
+    if (!prop) { errors.push(propName + ': property not found'); return; }
+    try {
+      if (hasRange) {
+        try { if (typeof prop.isTimeVarying === 'function' && !prop.isTimeVarying()) prop.setTimeVarying(true); } catch (tvErr) {}
+        var startTime = new Time();
+        startTime.ticks = String(paSecondsToTicks(Number(args.range_start_s)));
+        prop.addKey(startTime);
+        prop.setValueAtKey(startTime, value, true);
+        if (args.range_end_s !== undefined && args.range_end_s !== null) {
+          var endTime = new Time();
+          endTime.ticks = String(paSecondsToTicks(Number(args.range_end_s)));
+          prop.addKey(endTime);
+          prop.setValueAtKey(endTime, value, true);
+        }
+      } else {
+        prop.setValue(value, true);
+      }
+      applied[propName] = value;
+    } catch (err) {
+      errors.push(propName + ': ' + String(err));
+    }
+  }
+
+  if (args.scale !== undefined && args.scale !== null) applyProp('Scale', Number(args.scale));
+  if (args.position !== undefined && args.position !== null) applyProp('Position', args.position);
+  if (args.rotation !== undefined && args.rotation !== null) applyProp('Rotation', Number(args.rotation));
+
+  var appliedCount = 0;
+  for (var k in applied) { if (applied.hasOwnProperty(k)) appliedCount += 1; }
+  if (appliedCount === 0) {
+    return paJson({ ok: false, error: 'No transform values provided (scale/position/rotation), or all failed', details: errors });
+  }
+
+  return paJson({
+    ok: errors.length === 0,
+    clip_name: String(clip.name || ''),
+    applied: applied,
+    errors: errors,
+    keyframed: hasRange,
+    verification: 'Premiere accepted the write(s); verify via get_effect_properties readback or exported frames before delivery.'
+  });
 }
 
 function paRemoveClip(raw) {
