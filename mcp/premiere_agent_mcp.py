@@ -287,6 +287,86 @@ def live_bridge_inspect_dom_object(
     return PremiereLiveBridge(bridge_url).inspect_dom_object(object_path, max_depth=max_depth, dry_run=dry_run)
 
 
+def live_bridge_list_clip_effects(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int, *, bridge_url: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).list_clip_effects(sequence_id, track_type, track_index, clip_index, dry_run=dry_run)
+
+
+def live_bridge_get_effect_properties(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str, *, bridge_url: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_effect_properties(sequence_id, track_type, track_index, clip_index, effect_name, dry_run=dry_run)
+
+
+def live_bridge_set_effect_property(
+    sequence_id: str,
+    track_type: str,
+    track_index: int,
+    clip_index: int,
+    effect_name: str,
+    property_name: str,
+    value: float | str | bool,
+    *,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).set_effect_property(
+        sequence_id, track_type, track_index, clip_index, effect_name, property_name, value,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
+def live_bridge_get_keyframes(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str, property_name: str,
+    *, bridge_url: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).get_keyframes(sequence_id, track_type, track_index, clip_index, effect_name, property_name, dry_run=dry_run)
+
+
+def live_bridge_add_keyframe(
+    sequence_id: str,
+    track_type: str,
+    track_index: int,
+    clip_index: int,
+    effect_name: str,
+    property_name: str,
+    time_s: float,
+    value: float,
+    *,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).add_keyframe(
+        sequence_id, track_type, track_index, clip_index, effect_name, property_name, time_s, value,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
+def live_bridge_remove_keyframe(
+    sequence_id: str,
+    track_type: str,
+    track_index: int,
+    clip_index: int,
+    effect_name: str,
+    property_name: str,
+    time_s: float,
+    *,
+    backup_sequence_id: str | None = None,
+    bridge_url: str | None = None,
+    confirm: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).remove_keyframe(
+        sequence_id, track_type, track_index, clip_index, effect_name, property_name, time_s,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
 def live_bridge_move_clip(
     sequence_id: str,
     track_type: str,
@@ -571,6 +651,36 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Read-only: list a Premiere DOM object's properties (never calls methods) for API exploration/debugging, e.g. object_path='app.project.activeSequence.videoTracks[0].clips[0]'.",
         "inputSchema": {"type": "object", "properties": {"object_path": {"type": "string"}, "max_depth": {"type": "integer", "default": 1}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["object_path"]},
         "handler": lambda a: live_bridge_inspect_dom_object(a["object_path"], max_depth=a.get("max_depth", 1), bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_list_clip_effects": {
+        "description": "Read-only: list the effect components already applied to a clip (index + display/match name). Uses the public Component DOM, not QE.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index"]},
+        "handler": lambda a: live_bridge_list_clip_effects(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_effect_properties": {
+        "description": "Read-only: list an effect's properties (display name, current value, whether keyframes are supported/enabled) by effect display or match name (e.g. 'Motion', 'Opacity', 'Lumetri Color').",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name"]},
+        "handler": lambda a: live_bridge_get_effect_properties(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_set_effect_property": {
+        "description": "Set a value on an existing effect property (e.g. Opacity, Scale, Position on a clip's default Motion/Opacity components, or a Lumetri Color parameter). Only works on effects already present on the clip — this does not add a new effect. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "property_name": {"type": "string"}, "value": {"type": ["number", "string", "boolean"]}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name", "property_name", "value"]},
+        "handler": lambda a: live_bridge_set_effect_property(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], a["property_name"], a["value"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_get_keyframes": {
+        "description": "Read-only: list keyframes (time_s + value) for an effect property, if it's time-varying.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "property_name": {"type": "string"}, "bridge_url": {"type": "string"}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name", "property_name"]},
+        "handler": lambda a: live_bridge_get_keyframes(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], a["property_name"], bridge_url=a.get("bridge_url"), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_add_keyframe": {
+        "description": "Add a keyframe at time_s with the given value on an effect property, enabling time-varying if needed. Verifies via readback only (not render/playback). Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "property_name": {"type": "string"}, "time_s": {"type": "number"}, "value": {"type": "number"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name", "property_name", "time_s", "value"]},
+        "handler": lambda a: live_bridge_add_keyframe(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], a["property_name"], a["time_s"], a["value"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_remove_keyframe": {
+        "description": "Remove the keyframe at time_s on an effect property. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "property_name": {"type": "string"}, "time_s": {"type": "number"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name", "property_name", "time_s"]},
+        "handler": lambda a: live_bridge_remove_keyframe(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], a["property_name"], a["time_s"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_move_clip": {
         "description": "Copy a clip onto a different track (e.g. onto a separate camera track for multicam layout) via Track.insertClip. By default the original is left in place (remove_original=false) since TrackItem removal is unproven on this Premiere build; only set remove_original=true after confirming the copy looks correct. Requires confirm=true and backup_sequence_id.",

@@ -161,6 +161,37 @@ class MockPremiereBackend:
             raise JsonRpcError(-32602, "object_path is required")
         return {"ok": True, "object_path": params["object_path"], "inspected": {}, "note": "Mock backend does not introspect ExtendScript objects."}
 
+    def list_clip_effects(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "clip_name": f"mock_clip_{params.get('clip_index')}", "effects": [{"index": 0, "display_name": "Motion", "match_name": "AE.ADBE Motion"}, {"index": 1, "display_name": "Opacity", "match_name": "AE.ADBE Opacity"}]}
+
+    def get_effect_properties(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("effect_name"):
+            raise JsonRpcError(-32602, "effect_name is required")
+        return {"ok": True, "effect": params["effect_name"], "match_name": "", "properties": [{"index": 0, "display_name": "Opacity", "is_time_varying": False, "keyframes_supported": True, "value": 100}]}
+
+    def set_effect_property(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_backup(params)
+        if not params.get("effect_name") or not params.get("property_name"):
+            raise JsonRpcError(-32602, "effect_name and property_name are required")
+        return {"ok": True, "effect": params["effect_name"], "property": params["property_name"], "requested_value": params.get("value"), "value": params.get("value"), "readback_verified": True}
+
+    def get_keyframes(self, params: dict[str, Any]) -> dict[str, Any]:
+        if not params.get("effect_name") or not params.get("property_name"):
+            raise JsonRpcError(-32602, "effect_name and property_name are required")
+        return {"ok": True, "is_time_varying": False, "keyframes": [], "message": "Property has no keyframes"}
+
+    def add_keyframe(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_backup(params)
+        if params.get("time_s") is None or params.get("value") is None:
+            raise JsonRpcError(-32602, "time_s and value are required")
+        return {"ok": True, "added": True, "effect": params.get("effect_name"), "property": params.get("property_name"), "time_s": params["time_s"], "value": params["value"], "readback_value": params["value"]}
+
+    def remove_keyframe(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_backup(params)
+        if params.get("time_s") is None:
+            raise JsonRpcError(-32602, "time_s is required")
+        return {"ok": True, "removed": True, "effect": params.get("effect_name"), "property": params.get("property_name"), "time_s": params["time_s"]}
+
     def move_clip(self, params: dict[str, Any]) -> dict[str, Any]:
         seq = self._sequence(str(params.get("sequence_id") or self.active_sequence_id))
         _require_backup(params)

@@ -323,6 +323,103 @@ class PremiereLiveBridge:
         payload = {"object_path": object_path, "max_depth": int(max_depth)}
         return self._request(BridgeRequest("inspect_dom_object", payload, dry_run=dry_run)).to_dict()
 
+    def list_clip_effects(
+        self, sequence_id: str, track_type: str, track_index: int, clip_index: int, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        payload = {"sequence_id": sequence_id, "track_type": track_type, "track_index": int(track_index), "clip_index": int(clip_index)}
+        return self._request(BridgeRequest("list_clip_effects", payload, dry_run=dry_run)).to_dict()
+
+    def get_effect_properties(
+        self, sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        payload = {
+            "sequence_id": sequence_id, "track_type": track_type, "track_index": int(track_index),
+            "clip_index": int(clip_index), "effect_name": effect_name,
+        }
+        return self._request(BridgeRequest("get_effect_properties", payload, dry_run=dry_run)).to_dict()
+
+    def set_effect_property(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        effect_name: str,
+        property_name: str,
+        value: float | str | bool,
+        *,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("set_effect_property", confirm)
+            _require_backup("set_effect_property", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index), "effect_name": effect_name,
+            "property_name": property_name, "value": value,
+        }
+        return self._request(BridgeRequest("set_effect_property", payload, dry_run=dry_run)).to_dict()
+
+    def get_keyframes(
+        self, sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str, property_name: str, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        payload = {
+            "sequence_id": sequence_id, "track_type": track_type, "track_index": int(track_index),
+            "clip_index": int(clip_index), "effect_name": effect_name, "property_name": property_name,
+        }
+        return self._request(BridgeRequest("get_keyframes", payload, dry_run=dry_run)).to_dict()
+
+    def add_keyframe(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        effect_name: str,
+        property_name: str,
+        time_s: float,
+        value: float,
+        *,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("add_keyframe", confirm)
+            _require_backup("add_keyframe", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index), "effect_name": effect_name,
+            "property_name": property_name, "time_s": float(time_s), "value": value,
+        }
+        return self._request(BridgeRequest("add_keyframe", payload, dry_run=dry_run)).to_dict()
+
+    def remove_keyframe(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        effect_name: str,
+        property_name: str,
+        time_s: float,
+        *,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("remove_keyframe", confirm)
+            _require_backup("remove_keyframe", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index), "effect_name": effect_name,
+            "property_name": property_name, "time_s": float(time_s),
+        }
+        return self._request(BridgeRequest("remove_keyframe", payload, dry_run=dry_run)).to_dict()
+
     def import_media(
         self,
         sequence_id: str,

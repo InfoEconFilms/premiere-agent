@@ -1006,6 +1006,41 @@ def test_mcp_starter_tools(R: Results, tmp: Path) -> None:
             R.fail("Premiere bridge inspect_dom_object", str(inspect_result))
         else:
             R.ok("Premiere bridge inspect_dom_object")
+        fx_list = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 40, "method": "list_clip_effects", "params": {"sequence_id": "seq_main", "track_type": "video", "track_index": 0, "clip_index": 0}})
+        if not fx_list or not fx_list.get("result", {}).get("ok") or not fx_list["result"].get("effects"):
+            R.fail("Premiere bridge list_clip_effects", str(fx_list))
+        else:
+            R.ok("Premiere bridge list_clip_effects")
+        fx_props = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 41, "method": "get_effect_properties", "params": {"sequence_id": "seq_main", "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Opacity"}})
+        if not fx_props or not fx_props.get("result", {}).get("ok"):
+            R.fail("Premiere bridge get_effect_properties", str(fx_props))
+        else:
+            R.ok("Premiere bridge get_effect_properties")
+        fx_set = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 42, "method": "set_effect_property", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Opacity", "property_name": "Opacity", "value": 50}})
+        if not fx_set or not fx_set.get("result", {}).get("ok"):
+            R.fail("Premiere bridge set_effect_property", str(fx_set))
+        else:
+            R.ok("Premiere bridge set_effect_property")
+        fx_set_no_backup = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 43, "method": "set_effect_property", "params": {"sequence_id": "seq_main", "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Opacity", "property_name": "Opacity", "value": 50}})
+        if not fx_set_no_backup or not fx_set_no_backup.get("error"):
+            R.fail("Premiere bridge set_effect_property backup enforcement", str(fx_set_no_backup))
+        else:
+            R.ok("Premiere bridge set_effect_property backup enforcement")
+        kf_get = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 44, "method": "get_keyframes", "params": {"sequence_id": "seq_main", "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Opacity", "property_name": "Opacity"}})
+        if not kf_get or not kf_get.get("result", {}).get("ok"):
+            R.fail("Premiere bridge get_keyframes", str(kf_get))
+        else:
+            R.ok("Premiere bridge get_keyframes")
+        kf_add = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 45, "method": "add_keyframe", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Opacity", "property_name": "Opacity", "time_s": 1.0, "value": 50}})
+        if not kf_add or not kf_add.get("result", {}).get("ok"):
+            R.fail("Premiere bridge add_keyframe", str(kf_add))
+        else:
+            R.ok("Premiere bridge add_keyframe")
+        kf_remove = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 46, "method": "remove_keyframe", "params": {"sequence_id": "seq_main", "backup_sequence_id": backup_id, "track_type": "video", "track_index": 0, "clip_index": 0, "effect_name": "Opacity", "property_name": "Opacity", "time_s": 1.0}})
+        if not kf_remove or not kf_remove.get("result", {}).get("ok"):
+            R.fail("Premiere bridge remove_keyframe", str(kf_remove))
+        else:
+            R.ok("Premiere bridge remove_keyframe")
         listed = pbs.handle_jsonrpc(backend, {"jsonrpc": "2.0", "id": 31, "method": "list_markers", "params": {"sequence_id": "seq_main"}})
         if not listed or listed.get("result", {}).get("marker_count") != 1 or listed.get("result", {}).get("verification", {}).get("mutates_project") is not False:
             R.fail("Premiere bridge marker listing", str(listed))

@@ -45,6 +45,12 @@ It exposes safe tools plus dry-run live-bridge planning tools:
 | `premiere_agent_execute_extendscript` | escape hatch, dry-run default | Run arbitrary ES3 code in the already-loaded engine for anything not covered by a fixed tool; has access to every `paXxx` helper. No confirm/backup gate — carries the same crash risk as hand-editing `extendscript_bridge.jsx` (see the `move_clip` history), so the caller is fully responsible for that judgment on every call. |
 | `premiere_agent_evaluate_expression` | read-only, dry-run default | Evaluate a single ExtendScript expression and return its value — for quick reads, not multi-statement scripts. |
 | `premiere_agent_inspect_dom_object` | read-only, dry-run default | List a DOM object's properties (never calls methods) for API exploration. |
+| `premiere_agent_list_clip_effects` | read-only, dry-run default | List the effect components already on a clip (public Component DOM, no QE). |
+| `premiere_agent_get_effect_properties` | read-only, dry-run default | List an effect's properties, current values, and keyframe support. |
+| `premiere_agent_set_effect_property` | write, dry-run default | Set a value on an existing effect property (does not add a new effect); requires `confirm=true` and `backup_sequence_id`. |
+| `premiere_agent_get_keyframes` | read-only, dry-run default | List keyframes (time + value) for a time-varying effect property. |
+| `premiere_agent_add_keyframe` | write, dry-run default | Add a keyframe on an effect property, enabling time-varying if needed; requires `confirm=true` and `backup_sequence_id`. |
+| `premiere_agent_remove_keyframe` | write, dry-run default | Remove a keyframe at a given time; requires `confirm=true` and `backup_sequence_id`. |
 | `premiere_agent_export_review_frames` | render/file write, dry-run default | Export evenly spaced review frames from a live sequence. CEP first tries stills; on Premiere builds with no still preset it may return short H.264 proof clips, which the local side can frame-extract into a contact sheet. |
 | `premiere_agent_import_captions` | write, dry-run default | Import an `.srt`/`.vtt` caption file and scaffold caption-track creation where Premiere exposes it. |
 | `premiere_agent_import_media` | write, dry-run default | Import a media file (e.g. a rendered motion graphic) at an optional time/track; requires `confirm=true` and `backup_sequence_id`. |

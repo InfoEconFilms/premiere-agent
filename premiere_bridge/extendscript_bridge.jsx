@@ -1241,6 +1241,225 @@ function paInspectDomObjectValue(obj, depth, maxDepth) {
   return result;
 }
 
+// Effects/keyframes helpers: all read via the public, documented Component/
+// Property DOM (clip.components, component.properties, property.getValue/
+// setValue/getKeys/addKey/setValueAtKey/removeKey) — no QE DOM involved, unlike
+// paMoveClip's insertClip/remove or move_clip_to_track's moveToTrack.
+function paLookupClip(seq, trackType, trackIndex, clipIndex) {
+  var tracks = (trackType === 'audio') ? seq.audioTracks : seq.videoTracks;
+  if (!tracks) return null;
+  var track = null;
+  try { track = tracks[trackIndex]; } catch (e1) {}
+  if (!track) return null;
+  var clip = null;
+  try { clip = track.clips[clipIndex]; } catch (e2) {}
+  return clip;
+}
+
+function paFindComponent(clip, effectName) {
+  if (!clip || !clip.components) return null;
+  try {
+    for (var i = 0; i < clip.components.numItems; i += 1) {
+      var comp = clip.components[i];
+      if (String(comp.displayName || '') === effectName || String(comp.matchName || '') === effectName) return comp;
+    }
+  } catch (err) {}
+  return null;
+}
+
+function paFindProperty(comp, propertyName) {
+  if (!comp || !comp.properties) return null;
+  try {
+    for (var p = 0; p < comp.properties.numItems; p += 1) {
+      var prop = comp.properties[p];
+      if (String(prop.displayName || '') === propertyName) return prop;
+    }
+  } catch (err) {}
+  return null;
+}
+
+function paListClipEffects(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var effects = [];
+  try {
+    for (var i = 0; i < clip.components.numItems; i += 1) {
+      var comp = clip.components[i];
+      effects.push({ index: i, display_name: String(comp.displayName || ''), match_name: String(comp.matchName || '') });
+    }
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, clip_name: String(clip.name || ''), effects: effects });
+}
+
+function paGetEffectProperties(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var comp = paFindComponent(clip, String(args.effect_name || ''));
+  if (!comp) return paJson({ ok: false, error: 'Effect not found: ' + String(args.effect_name || '') });
+  var props = [];
+  try {
+    for (var p = 0; p < comp.properties.numItems; p += 1) {
+      var prop = comp.properties[p];
+      var info = { index: p, display_name: String(prop.displayName || ''), is_time_varying: false, keyframes_supported: false, value: null };
+      try { info.is_time_varying = !!prop.isTimeVarying(); } catch (e1) {}
+      try { info.keyframes_supported = !!prop.areKeyframesSupported(); } catch (e2) {}
+      try { info.value = prop.getValue(0, 0); } catch (e3) {}
+      props.push(info);
+    }
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, effect: String(comp.displayName || ''), match_name: String(comp.matchName || ''), properties: props });
+}
+
+function paSetEffectProperty(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var comp = paFindComponent(clip, String(args.effect_name || ''));
+  if (!comp) return paJson({ ok: false, error: 'Effect not found: ' + String(args.effect_name || '') });
+  var prop = paFindProperty(comp, String(args.property_name || ''));
+  if (!prop) return paJson({ ok: false, error: 'Property not found: ' + String(args.property_name || '') });
+  var value = args.value;
+  try {
+    prop.setValue(value, true);
+  } catch (err) {
+    return paJson({ ok: false, error: 'Premiere could not set the requested effect property: ' + String(err) });
+  }
+  var readback = null;
+  var readbackAvailable = true;
+  try { readback = prop.getValue(); } catch (rbErr) { readbackAvailable = false; }
+  return paJson({
+    ok: true,
+    effect: String(args.effect_name || ''),
+    property: String(args.property_name || ''),
+    requested_value: value,
+    value: readbackAvailable ? readback : value,
+    readback_verified: readbackAvailable && readback === value,
+    verification: readbackAvailable
+      ? 'Premiere parameter readback only; verify playback or exported frames before delivery.'
+      : 'Premiere accepted the write but this property exposed no readback value; verify playback or exported frames before delivery.'
+  });
+}
+
+function paGetKeyframes(raw) {
+  var args = paParse(raw);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var comp = paFindComponent(clip, String(args.effect_name || ''));
+  if (!comp) return paJson({ ok: false, error: 'Effect not found' });
+  var prop = paFindProperty(comp, String(args.property_name || ''));
+  if (!prop) return paJson({ ok: false, error: 'Property not found' });
+  var isTimeVarying = false;
+  try { isTimeVarying = !!prop.isTimeVarying(); } catch (e1) {}
+  if (!isTimeVarying) {
+    return paJson({ ok: true, is_time_varying: false, keyframes: [], message: 'Property has no keyframes' });
+  }
+  var keyframes = [];
+  try {
+    var keys = prop.getKeys();
+    if (keys) {
+      for (var k = 0; k < keys.length; k += 1) {
+        var time = keys[k];
+        var val = null;
+        try { val = prop.getValueAtKey(time); } catch (e2) {}
+        keyframes.push({ time_s: paTicksToSeconds(time.ticks), value: val });
+      }
+    }
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+  return paJson({ ok: true, is_time_varying: true, keyframes: keyframes });
+}
+
+function paAddKeyframe(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var comp = paFindComponent(clip, String(args.effect_name || ''));
+  if (!comp) return paJson({ ok: false, error: 'Effect not found' });
+  var prop = paFindProperty(comp, String(args.property_name || ''));
+  if (!prop) return paJson({ ok: false, error: 'Property not found' });
+  try {
+    if (typeof prop.areKeyframesSupported === 'function' && !prop.areKeyframesSupported()) {
+      return paJson({ ok: false, error: 'Property does not support keyframes' });
+    }
+  } catch (e1) {}
+  try {
+    if (typeof prop.isTimeVarying === 'function' && !prop.isTimeVarying()) {
+      prop.setTimeVarying(true);
+    }
+  } catch (e2) {}
+  var timeS = Number(args.time_s || 0);
+  var value = args.value;
+  try {
+    var time = new Time();
+    time.ticks = String(paSecondsToTicks(timeS));
+    prop.addKey(time);
+    prop.setValueAtKey(time, value, true);
+    var readBack = null;
+    try { readBack = prop.getValueAtKey(time); } catch (e3) {}
+    if (readBack === null || readBack === undefined) {
+      return paJson({ ok: false, error: 'Premiere did not return the keyframe value after writing it; storage is not verified.' });
+    }
+    if (typeof readBack === 'number' && typeof value === 'number' && Math.abs(readBack - value) > 0.0001) {
+      return paJson({ ok: false, error: 'Premiere returned ' + readBack + ' after writing keyframe value ' + value + '; storage is not verified.' });
+    }
+    return paJson({
+      ok: true,
+      added: true,
+      effect: String(args.effect_name || ''),
+      property: String(args.property_name || ''),
+      time_s: timeS,
+      value: value,
+      readback_value: readBack,
+      verification: 'Premiere parameter readback only; verify playback or exported frames before relying on visual output.'
+    });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
+function paRemoveKeyframe(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var clip = paLookupClip(seq, String(args.track_type || 'video').toLowerCase(), Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var comp = paFindComponent(clip, String(args.effect_name || ''));
+  if (!comp) return paJson({ ok: false, error: 'Effect not found' });
+  var prop = paFindProperty(comp, String(args.property_name || ''));
+  if (!prop) return paJson({ ok: false, error: 'Property not found' });
+  try {
+    var time = new Time();
+    time.ticks = String(paSecondsToTicks(Number(args.time_s || 0)));
+    prop.removeKey(time);
+    return paJson({ ok: true, removed: true, effect: String(args.effect_name || ''), property: String(args.property_name || ''), time_s: Number(args.time_s || 0) });
+  } catch (err) {
+    return paJson({ ok: false, error: String(err) });
+  }
+}
+
 function paInspectDomObject(raw) {
   var args = paParse(raw);
   var objectPath = String(args.object_path || '');

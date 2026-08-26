@@ -37,7 +37,13 @@
     remove_clip: 'paRemoveClip',
     execute_extendscript: 'paExecuteExtendScript',
     evaluate_expression: 'paEvaluateExpression',
-    inspect_dom_object: 'paInspectDomObject'
+    inspect_dom_object: 'paInspectDomObject',
+    list_clip_effects: 'paListClipEffects',
+    get_effect_properties: 'paGetEffectProperties',
+    set_effect_property: 'paSetEffectProperty',
+    get_keyframes: 'paGetKeyframes',
+    add_keyframe: 'paAddKeyframe',
+    remove_keyframe: 'paRemoveKeyframe'
   };
 
   function jsonRpcError(id, code, message) {
