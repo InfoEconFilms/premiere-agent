@@ -2408,27 +2408,9 @@ function paOverwriteFromSource(raw) {
   var vTrack = args.video_track_index !== undefined && args.video_track_index !== null ? Number(args.video_track_index) : 0;
   var aTrack = args.audio_track_index !== undefined && args.audio_track_index !== null ? Number(args.audio_track_index) : 0;
   try {
-    var pos = Number(seq.getPlayerPosition().ticks);
-    // Sequence.overwriteClip (unlike insertClip) lands the clip at
-    // (time + source_in_point), not at `time` itself -- confirmed live via
-    // an isolated A/B test with the Source Monitor in-point at 0.2s and at
-    // 0s. Subtract the source item's current in-point here so the clip
-    // actually lands at the requested playhead position, matching
-    // insertClip's (and this function's own documented/expected) behavior.
-    var inTicks = 0;
-    try { inTicks = Number(item.getInPoint().ticks); } catch (inErr) {}
-    var adjustedPos = pos - inTicks;
-    var clamped = false;
-    if (adjustedPos < 0) { adjustedPos = 0; clamped = true; }
-    // Time.ticks is a big-integer string, not a native JS number (see
-    // paSecondsToTicks/paTicksToSeconds elsewhere in this file) -- passing a
-    // plain JS Number back into overwriteClip here silently produced the
-    // wrong position (Premiere appears to mis-marshal it), confirmed live.
-    // Must re-stringify before calling back into the native API.
-    seq.overwriteClip(item, String(Math.round(adjustedPos)), vTrack, aTrack);
-    var result = { ok: true, overwritten: true, item: String(item.name || ''), at_seconds: paTicksToSeconds(pos) };
-    if (clamped) result.note = 'Source in-point exceeded the target position; overwrite position could not be fully compensated and was clamped to 0. Verify placement with get_sequence_structure.';
-    return paJson(result);
+    var pos = seq.getPlayerPosition().ticks;
+    seq.overwriteClip(item, pos, vTrack, aTrack);
+    return paJson({ ok: true, overwritten: true, item: String(item.name || ''), at_seconds: paTicksToSeconds(pos) });
   } catch (err) {
     return paJson({ ok: false, error: String(err) });
   }
