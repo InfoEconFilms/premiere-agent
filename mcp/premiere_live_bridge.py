@@ -42,6 +42,7 @@ WRITE_ACTIONS = {
     "export_sequence_review_frames",
     "queue_export",
     "apply_basic_lumetri",
+    "apply_effect",
     "set_clip_transform",
 }
 DESTRUCTIVE_ACTIONS = {
@@ -549,6 +550,27 @@ class PremiereLiveBridge:
             "look": look, "intensity": float(intensity),
         }
         return self._request(BridgeRequest("apply_basic_lumetri", payload, dry_run=dry_run)).to_dict()
+
+    def apply_effect(
+        self,
+        sequence_id: str,
+        track_type: str,
+        track_index: int,
+        clip_index: int,
+        effect_name: str,
+        *,
+        backup_sequence_id: str | None = None,
+        confirm: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if not dry_run:
+            _require_confirm("apply_effect", confirm)
+            _require_backup("apply_effect", backup_sequence_id)
+        payload = {
+            "sequence_id": sequence_id, "backup_sequence_id": backup_sequence_id, "track_type": track_type,
+            "track_index": int(track_index), "clip_index": int(clip_index), "effect_name": effect_name,
+        }
+        return self._request(BridgeRequest("apply_effect", payload, dry_run=dry_run)).to_dict()
 
     def save_project(self, *, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
         if not dry_run:

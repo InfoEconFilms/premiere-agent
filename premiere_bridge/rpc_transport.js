@@ -32,6 +32,7 @@
     import_media: 'paImportMedia',
     queue_export: 'paQueueExport',
     apply_basic_lumetri: 'paApplyBasicLumetri',
+    apply_effect: 'paApplyEffect',
     set_clip_transform: 'paSetClipTransform',
     move_clip: 'paMoveClip',
     remove_clip: 'paRemoveClip',

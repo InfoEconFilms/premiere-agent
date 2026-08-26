@@ -1235,6 +1235,72 @@ function paApplyBasicLumetri(raw) {
   });
 }
 
+// General-purpose "add any named effect to a clip via the QE DOM" tool.
+// Generalizes the add-effect path already proven live in paApplyBasicLumetri
+// (see that function's QE block) -- confirmed working for BOTH video effects
+// (qe...getVideoEffectByName(name, false) + item.addVideoEffect) and audio
+// effects (qe...getAudioEffectByName(name) -- note: only ONE argument, unlike
+// the video lookup -- + item.addAudioEffect), unlike most other QE structural
+// edits (split/ripple/speed/moveToTrack/transitions), which were confirmed
+// broken/no-op on this Premiere build via live testing.
+function paApplyEffect(raw) {
+  var args = paParse(raw);
+  var backupErr = paRequireBackup(args);
+  if (backupErr) return paJson(backupErr);
+  var seq = paFindSequence(args.sequence_id);
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var trackType = String(args.track_type || 'video').toLowerCase();
+  var clip = paLookupClip(seq, trackType, Number(args.track_index), Number(args.clip_index));
+  if (!clip) return paJson({ ok: false, error: 'Clip not found' });
+  var effectName = String(args.effect_name || '');
+  if (!effectName) return paJson({ ok: false, error: 'effect_name is required' });
+
+  var comp = paFindComponent(clip, effectName);
+  if (comp) {
+    return paJson({ ok: true, clip_name: String(clip.name || ''), effect_name: effectName, already_present: true, effect_added: false });
+  }
+
+  try {
+    app.enableQE();
+    if (paSequenceId(seq) !== paSequenceId(app.project.activeSequence)) {
+      return paJson({ ok: false, error: 'Target sequence must be the active sequence to add a new effect via the QE DOM (adding effects to a non-active sequence is not supported).' });
+    }
+    var qeSeq = qe.project.getActiveSequence();
+    var effect = (trackType === 'audio')
+      ? qe.project.getAudioEffectByName(effectName)
+      : qe.project.getVideoEffectByName(effectName, false);
+    if (!effect) return paJson({ ok: false, error: 'Effect not found via QE DOM: ' + effectName });
+    var qeTrack = (trackType === 'audio') ? qeSeq.getAudioTrackAt(Number(args.track_index)) : qeSeq.getVideoTrackAt(Number(args.track_index));
+    if (!qeTrack) return paJson({ ok: false, error: 'Could not resolve the target track via the QE DOM' });
+    var qeItem = null;
+    var seen = 0;
+    for (var qi = 0; qi < qeTrack.numItems; qi += 1) {
+      var cand = qeTrack.getItemAt(qi);
+      var isEmpty = false;
+      try { isEmpty = (String(cand.type) === 'Empty'); } catch (typeErr) {}
+      if (isEmpty) continue;
+      if (seen === Number(args.clip_index)) { qeItem = cand; break; }
+      seen += 1;
+    }
+    if (!qeItem) return paJson({ ok: false, error: 'Could not resolve the target clip via the QE DOM' });
+    var addOk = (trackType === 'audio') ? qeItem.addAudioEffect(effect) : qeItem.addVideoEffect(effect);
+    if (!addOk) return paJson({ ok: false, error: 'QE DOM declined to add ' + effectName + ' to this clip' });
+    comp = paFindComponent(clip, effectName);
+    if (!comp) return paJson({ ok: false, error: effectName + ' was reported added but is not visible on the clip afterward' });
+  } catch (addErr) {
+    return paJson({ ok: false, error: 'Failed to add ' + effectName + ': ' + String(addErr) });
+  }
+
+  return paJson({
+    ok: true,
+    clip_name: String(clip.name || ''),
+    effect_name: effectName,
+    already_present: false,
+    effect_added: true,
+    verification: 'Confirmed present via the public Component DOM after the QE add call; use get_effect_properties/set_effect_property to read or configure it.'
+  });
+}
+
 function paSetClipTransform(raw) {
   var args = paParse(raw);
   var backupErr = paRequireBackup(args);

@@ -459,6 +459,16 @@ def live_bridge_apply_basic_lumetri(
     )
 
 
+def live_bridge_apply_effect(
+    sequence_id: str, track_type: str, track_index: int, clip_index: int, effect_name: str,
+    *, backup_sequence_id: str | None = None, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True,
+) -> dict[str, Any]:
+    return PremiereLiveBridge(bridge_url).apply_effect(
+        sequence_id, track_type, track_index, clip_index, effect_name,
+        backup_sequence_id=backup_sequence_id, confirm=confirm, dry_run=dry_run,
+    )
+
+
 def live_bridge_save_project(*, bridge_url: str | None = None, confirm: bool = False, dry_run: bool = True) -> dict[str, Any]:
     return PremiereLiveBridge(bridge_url).save_project(confirm=confirm, dry_run=dry_run)
 
@@ -1120,6 +1130,11 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Apply a named Lumetri Color look to a clip's Basic Correction sliders (Exposure/Contrast/Highlights/Shadows/Whites/Blacks/Saturation), scaled by intensity (0-1, default 0.25). Adds the Lumetri Color effect via the QE DOM if the clip doesn't already have it (target sequence must be the active sequence for this). Looks: subtle_professional, warm, cool, high_contrast, muted. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "look": {"type": "string", "enum": ["subtle_professional", "warm", "cool", "high_contrast", "muted"], "default": "subtle_professional"}, "intensity": {"type": "number", "default": 0.25}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index"]},
         "handler": lambda a: live_bridge_apply_basic_lumetri(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], look=a.get("look", "subtle_professional"), intensity=a.get("intensity", 0.25), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
+    },
+    "premiere_agent_apply_effect": {
+        "description": "Add a named effect to a clip via the QE DOM (video or audio), idempotent if the clip already has it. Confirmed live to work for both video effects (e.g. 'Lumetri Color', 'Black & White') and audio effects (e.g. 'Bass', 'Treble') on Premiere 26.3.2 -- unlike most other QE structural edits (split/ripple/speed/moveToTrack/transitions), which are silent no-ops or throw on this build. Only adds the effect; use set_effect_property to configure it afterward. Target sequence must be the active sequence. Requires confirm=true and backup_sequence_id.",
+        "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "track_type": {"type": "string", "enum": ["video", "audio"]}, "track_index": {"type": "integer"}, "clip_index": {"type": "integer"}, "effect_name": {"type": "string"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "track_type", "track_index", "clip_index", "effect_name"]},
+        "handler": lambda a: live_bridge_apply_effect(a["sequence_id"], a["track_type"], a["track_index"], a["clip_index"], a["effect_name"], backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_save_project": {
         "description": "Save the current Premiere project to disk. Requires confirm=true.",
