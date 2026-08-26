@@ -709,6 +709,17 @@ function paWithExtension(path, ext) {
   return s + ext;
 }
 
+function paFindPresetByHint(hint) {
+  var needle = String(hint || '').toLowerCase().replace(/_/g, ' ');
+  if (!needle) return '';
+  var presets = paCollectAllPresets();
+  for (var i = 0; i < presets.length; i += 1) {
+    var haystack = (presets[i].name + ' ' + presets[i].format).toLowerCase();
+    if (haystack.indexOf(needle) !== -1) return presets[i].path;
+  }
+  return '';
+}
+
 function paFindH264Preset() {
   var presets = paCollectAllPresets();
   var first = '';
@@ -989,29 +1000,56 @@ function paQueueExport(raw) {
   var backupErr = paRequireBackup(args);
   if (backupErr) return paJson(backupErr);
   var seq = paFindSequence(args.sequence_id);
-  if (!seq) return paJson({ ok: false, error: 'Sequence not found' });
+  if (!seq) return paJson({ ok: false, error: 'Sequence not found', sequence_id: args.sequence_id || null });
+  var outputPath = String(args.output_path || '');
+  if (!outputPath) return paJson({ ok: false, error: 'output_path required' });
+  if (!seq.exportAsMediaDirect) return paJson({ ok: false, error: 'sequence.exportAsMediaDirect unavailable on this Premiere version' });
+  var preset = args.preset ? paFindPresetByHint(args.preset) : '';
+  if (!preset) preset = paFindH264Preset();
+  if (!preset) return paJson({ ok: false, error: 'No matching export preset found on this system (checked Premiere/AME system presets)', requested_preset: args.preset || null });
   try {
-    var outputPath = String(args.output_path || '');
-    if (!outputPath) return paJson({ ok: false, error: 'output_path required' });
-    if (app.encoder && app.encoder.launchEncoder) app.encoder.launchEncoder();
-    // Actual preset paths are site-specific. Return a structured handoff until a
-    // production preset file is configured.
-    return paJson({
-      ok: true,
-      queued: false,
-      sequence_id: paSequenceId(seq),
-      "export": {
-        output_path: outputPath,
-        range_start_s: args.range_start_s || null,
-        range_end_s: args.range_end_s || null,
-        preset: args.preset || 'match_source_h264',
-        backup_sequence_id: args.backup_sequence_id
-      },
-      next_step: 'Configure a Premiere/AME .epr preset path, then call sequence.exportAsMediaDirect or encoder.encodeSequence.'
-    });
+    var outFile = new File(paNormalizeFolderPath(outputPath));
+    if (outFile.parent) paEnsureFolder(outFile.parent.fsName);
+  } catch (folderErr) {}
+  var stale = new File(outputPath);
+  try { if (stale.exists) stale.remove(); } catch (removeErr) {}
+  var hasRange = args.range_start_s !== undefined && args.range_start_s !== null && args.range_end_s !== undefined && args.range_end_s !== null;
+  var savedIn = null;
+  var savedOut = null;
+  try { if (seq.getInPointAsTime) savedIn = seq.getInPointAsTime().ticks; } catch (e1) {}
+  try { if (seq.getOutPointAsTime) savedOut = seq.getOutPointAsTime().ticks; } catch (e2) {}
+  var workArea = app.encoder.ENCODE_ENTIRE;
+  var exportErr = null;
+  try {
+    if (hasRange) {
+      seq.setInPoint(Number(args.range_start_s));
+      seq.setOutPoint(Number(args.range_end_s));
+      workArea = app.encoder.ENCODE_IN_TO_OUT;
+    }
+    seq.exportAsMediaDirect(outputPath, preset, workArea);
   } catch (err) {
-    return paJson({ ok: false, error: String(err) });
+    exportErr = String(err);
   }
+  try { if (savedIn !== null) seq.setInPoint(paTicksToSeconds(savedIn)); } catch (r1) {}
+  try { if (savedOut !== null) seq.setOutPoint(paTicksToSeconds(savedOut)); } catch (r2) {}
+  if (exportErr) return paJson({ ok: false, error: exportErr, sequence_id: paSequenceId(seq) });
+  var written = paFirstWrittenFile(outputPath);
+  var result = {
+    ok: !!written,
+    queued: false,
+    exported: !!written,
+    sequence_id: paSequenceId(seq),
+    "export": {
+      output_path: written || outputPath,
+      preset: preset,
+      range_start_s: hasRange ? Number(args.range_start_s) : null,
+      range_end_s: hasRange ? Number(args.range_end_s) : null,
+      backup_sequence_id: args.backup_sequence_id
+    },
+    note: 'exportAsMediaDirect renders synchronously through Premiere itself (not queued to Adobe Media Encoder); this call blocks until the file is written or the render fails.'
+  };
+  if (!written) result.error = 'No file was written at the requested output path';
+  return paJson(result);
 }
 
 function paApplyBasicLumetri(raw) {

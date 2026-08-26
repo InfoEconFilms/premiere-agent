@@ -1313,7 +1313,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "handler": lambda a: live_bridge_import_media(a["sequence_id"], a["media_path"], time_s=a.get("time_s"), track=a.get("track"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
     "premiere_agent_queue_export": {
-        "description": "Queue a live Premiere sequence/range export. Requires confirm=true and backup_sequence_id.",
+        "description": "Export a live Premiere sequence (or range) to a file via sequence.exportAsMediaDirect, auto-selecting a matching system preset (H.264 by default, or a name/format hint via `preset`). Synchronous: blocks until Premiere finishes writing the file or the render fails, and reports the real written path — not queued to Adobe Media Encoder despite the tool name. Requires confirm=true and backup_sequence_id.",
         "inputSchema": {"type": "object", "properties": {"sequence_id": {"type": "string"}, "output_path": {"type": "string"}, "range_start_s": {"type": "number"}, "range_end_s": {"type": "number"}, "preset": {"type": "string", "default": "match_source_h264"}, "backup_sequence_id": {"type": "string"}, "bridge_url": {"type": "string"}, "confirm": {"type": "boolean", "default": False}, "dry_run": {"type": "boolean", "default": True}}, "required": ["sequence_id", "output_path"]},
         "handler": lambda a: live_bridge_queue_export(a["sequence_id"], a["output_path"], range_start_s=a.get("range_start_s"), range_end_s=a.get("range_end_s"), preset=a.get("preset", "match_source_h264"), backup_sequence_id=a.get("backup_sequence_id"), bridge_url=a.get("bridge_url"), confirm=a.get("confirm", False), dry_run=a.get("dry_run", True)),
     },
