@@ -981,7 +981,7 @@ function paImportCaptions(raw) {
 }
 
 function paParseTrackSpec(spec, defaultType) {
-  var s = String(spec || '').trim();
+  var s = String(spec || '').replace(/^\s+|\s+$/g, '');
   if (!s) return { type: defaultType || 'video', index: 0 };
   var m = /^([va])(\d+)$/i.exec(s);
   if (m) {
